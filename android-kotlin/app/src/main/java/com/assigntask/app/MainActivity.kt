@@ -205,14 +205,14 @@ fun TasksForAllPage(vm: AppViewModel, user: FirebaseUser) {
                 items(pendingTasks, key = { it.id }) { task ->
                     TaskRow(task, "tasks_for_all", null, user, true, vm,
                         onShowComments = { showComments = it },
-                        onEditTask = { showEditTask = it to "tasks_for_all" })
+                        onEditTask = { t, type -> showEditTask = t to type })
                 }
 
                 if (doneTasks.isNotEmpty()) {
                     item {
                         CompletedToggle(doneTasks, "tasks_for_all", null, user, true, vm,
                             onShowComments = { showComments = it },
-                            onEditTask = { showEditTask = it to "tasks_for_all" })
+                            onEditTask = { t, type -> showEditTask = t to type })
                     }
                 }
             }
@@ -302,14 +302,14 @@ fun IndividualTasksPage(vm: AppViewModel, user: FirebaseUser) {
                 items(pendingTasks, key = { it.id }) { task ->
                     TaskRow(task, "tasks", null, user, true, vm,
                         onShowComments = { showComments = it },
-                        onEditTask = { showEditTask = it to "tasks" })
+                        onEditTask = { t, type -> showEditTask = t to type })
                 }
 
                 if (doneTasks.isNotEmpty()) {
                     item {
                         CompletedToggle(doneTasks, "tasks", null, user, true, vm,
                             onShowComments = { showComments = it },
-                            onEditTask = { showEditTask = it to "tasks" })
+                            onEditTask = { t, type -> showEditTask = t to type })
                     }
                 }
             }
