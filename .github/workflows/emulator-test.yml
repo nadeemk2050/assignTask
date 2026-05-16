@@ -57,7 +57,7 @@ jobs:
         with:
           api-level: 30
           target: default
-          arch: x86_64
+          arch: arm64-v8a
           profile: Nexus 6
           ram-size: 2048M
           heap-size: 512M
