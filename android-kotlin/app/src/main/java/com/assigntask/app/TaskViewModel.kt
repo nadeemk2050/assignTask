@@ -741,8 +741,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         db.collection("$BASE/projects").document(id).update("name", name)
     }
 
-    fun deleteProject(id: String) {
+    fun deleteProject(id: String, password: String, onResult: (String?) -> Unit) {
+        if (password != ADMIN_ACTION_PASSWORD) {
+            onResult("Wrong password")
+            return
+        }
         db.collection("$BASE/projects").document(id).delete()
+            .addOnSuccessListener { onResult(null) }
+            .addOnFailureListener { onResult(it.message ?: "Failed to delete project") }
     }
 
     fun clearError() { _errorMessage.value = null }

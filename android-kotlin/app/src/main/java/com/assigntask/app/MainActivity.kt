@@ -47,12 +47,6 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val authState by vm.authState.collectAsState()
     val error by vm.errorMessage.collectAsState()
 
-    error?.let {
-        LaunchedEffect(it) {
-            // Error shown via Snackbar or inline; clear after display
-        }
-    }
-
     when (val state = authState) {
         is AuthState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -62,795 +56,514 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     }
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-@Composable
-fun AuthScreen(vm: AppViewModel) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-    var showAdminSignupConfirm by remember { mutableStateOf(false) }
-    val selfRegistrationAllowed by vm.selfRegistrationAllowed.collectAsState()
-    val globalError by vm.errorMessage.collectAsState()
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(Icons.Default.Assignment, null, modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
-            tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(12.dp))
-        Text("Project & Task Board", style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Text(
-            when {
-                selfRegistrationAllowed == null -> "Checking workspace access..."
-                isSignUp -> "You are creating a full new admin account"
-                else -> "Sign in to manage your team"
-            },
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
-            modifier = Modifier.align(Alignment.CenterHorizontally))
-        Spacer(Modifier.height(24.dp))
-
-        globalError?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        errorMsg?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        OutlinedTextField(value = email, onValueChange = { email = it; errorMsg = null },
-            label = { Text("Email Address") }, modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = password, onValueChange = { password = it; errorMsg = null },
-            label = { Text("Password") }, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                errorMsg = null
-                if (isSignUp) {
-                    showAdminSignupConfirm = true
-                } else {
-                    vm.signIn(email, password) { errorMsg = it }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = selfRegistrationAllowed != null
-        ) { Text(if (isSignUp) "Create Account" else "Sign In") }
-
-        TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null },
-            modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text(if (isSignUp) "Already have an account? Sign In" else "Need an account? Sign Up")
-        }
-
-        if (showAdminSignupConfirm) {
-            AlertDialog(
-                onDismissRequest = { showAdminSignupConfirm = false },
-                title = { Text("Create New Admin Account") },
-                text = {
-                    Text(
-                        "You are making a full new admin account. Are you sure you need it? If you want to join any team, tell the admin to add you."
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showAdminSignupConfirm = false
-                        vm.signUp(email, password) { errorMsg = it }
-                    }) {
-                        Text("Yes, create admin")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAdminSignupConfirm = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
-    }
-}
-
-// ─── Main App ─────────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = if (profile.isAdmin) listOf("Tasks", "Projects", "Settings") else listOf("Tasks", "Projects")
+    var currentPage by remember { mutableStateOf<String>("tasksForAll") }
+    var drawerOpen by remember { mutableStateOf(false) }
 
-    // Dialog state
-    var commentState by remember { mutableStateOf<CommentDialogState?>(null) }
-    var editTaskState by remember { mutableStateOf<EditTaskDialogState?>(null) }
-    var accountMenuExpanded by remember { mutableStateOf(false) }
-    var showProfileDialog by remember { mutableStateOf(false) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Project & Task Board", style = MaterialTheme.typography.titleMedium) },
-                navigationIcon = {
-                    Box {
-                        IconButton(onClick = { accountMenuExpanded = true }) {
-                            Icon(Icons.Default.Menu, "Account menu")
-                        }
-                        DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Edit Profile") },
-                                leadingIcon = { Icon(Icons.Default.Person, null) },
-                                onClick = {
-                                    accountMenuExpanded = false
-                                    showProfileDialog = true
-                                }
-                            )
-                            if (profile.isAdmin) {
-                                DropdownMenuItem(
-                                    text = { Text("Add Sub Users") },
-                                    leadingIcon = { Icon(Icons.Default.GroupAdd, null) },
-                                    onClick = {
-                                        accountMenuExpanded = false
-                                        selectedTab = tabs.indexOf("Settings").coerceAtLeast(0)
-                                    }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Logout") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
-                                onClick = {
-                                    accountMenuExpanded = false
-                                    vm.signOut()
-                                }
-                            )
-                        }
-                    }
+    ModalNavigationDrawer(
+        drawerContent = {
+            NavigationDrawerContent(
+                currentPage = currentPage,
+                onPageSelect = { page ->
+                    currentPage = page
+                    drawerOpen = false
                 },
-                actions = {
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 4.dp)) {
-                        Text(profile.displayName, style = MaterialTheme.typography.labelSmall)
-                        Text(user.email ?: "", style = MaterialTheme.typography.labelSmall)
-                        Text(profile.role, style = MaterialTheme.typography.labelSmall,
-                            color = if (profile.isAdmin) Color(0xFF16A34A) else MaterialTheme.colorScheme.primary)
-                    }
-                }
+                profile = profile,
+                vm = vm,
+                user = user,
+                onLogout = { vm.signOut() }
             )
         },
-        bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = {
-                            when (tab) {
-                                "Tasks" -> Icon(Icons.Default.FormatListBulleted, tab)
-                                "Projects" -> Icon(Icons.Default.Folder, tab)
-                                else -> Icon(Icons.Default.Settings, tab)
-                            }
-                        },
-                        label = { Text(tab) }
-                    )
+        drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
+    ) {
+        drawerOpen = (drawerState.isOpen)
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(pageTitle(currentPage)) },
+                    navigationIcon = {
+                        IconButton(onClick = { drawerOpen = !drawerOpen }) {
+                            Icon(Icons.Default.Menu, "Menu")
+                        }
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                when (currentPage) {
+                    "tasksForAll" -> TasksForAllPage(vm, user)
+                    "individualTasks" -> IndividualTasksPage(vm, user)
+                    "projects" -> ProjectsPage(vm, user)
+                    "profile" -> UserProfilePage(profile, vm, onBack = { currentPage = "tasksForAll" })
                 }
             }
         }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when (tabs.getOrNull(selectedTab)) {
-                "Tasks" -> TasksPage(vm, user, profile,
-                    onShowComments = { task, type, pId -> commentState = CommentDialogState(task, type, pId) },
-                    onEditTask = { task, type, pId -> editTaskState = EditTaskDialogState(task, type, pId) })
-                "Projects" -> ProjectsPage(vm, user, profile,
-                    onShowComments = { task, type, pId -> commentState = CommentDialogState(task, type, pId) },
-                    onEditTask = { task, type, pId -> editTaskState = EditTaskDialogState(task, type, pId) })
-                "Settings" -> SettingsPage(vm, user, profile)
-                else -> Unit
+    }
+}
+
+@Composable
+fun NavigationDrawerContent(
+    currentPage: String,
+    onPageSelect: (String) -> Unit,
+    profile: UserProfile,
+    vm: AppViewModel,
+    user: FirebaseUser,
+    onLogout: () -> Unit
+) {
+    ModalDrawerSheet {
+        Spacer(Modifier.height(16.dp))
+        Text("Project & Task Board", style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+        HorizontalDivider()
+        
+        NavigationDrawerItem(
+            label = { Text("Tasks For All") },
+            icon = { Icon(Icons.Default.ListAlt, null) },
+            selected = currentPage == "tasksForAll",
+            onClick = { onPageSelect("tasksForAll") }
+        )
+        
+        NavigationDrawerItem(
+            label = { Text("Individual Tasks") },
+            icon = { Icon(Icons.Default.Assignment, null) },
+            selected = currentPage == "individualTasks",
+            onClick = { onPageSelect("individualTasks") }
+        )
+        
+        NavigationDrawerItem(
+            label = { Text("Projects") },
+            icon = { Icon(Icons.Default.Folder, null) },
+            selected = currentPage == "projects",
+            onClick = { onPageSelect("projects") }
+        )
+        
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        
+        NavigationDrawerItem(
+            label = { Text("User Profile") },
+            icon = { Icon(Icons.Default.Person, null) },
+            selected = currentPage == "profile",
+            onClick = { onPageSelect("profile") }
+        )
+        
+        Spacer(Modifier.weight(1f))
+        HorizontalDivider()
+        
+        NavigationDrawerItem(
+            label = { Text("Sign Out") },
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
+            selected = false,
+            onClick = onLogout
+        )
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+fun pageTitle(page: String): String = when (page) {
+    "tasksForAll" -> "Tasks For All"
+    "individualTasks" -> "Individual Tasks"
+    "projects" -> "Projects"
+    "profile" -> "User Profile"
+    else -> "Project & Task Board"
+}
+
+@Composable
+fun TasksForAllPage(vm: AppViewModel, user: FirebaseUser) {
+    val tasksForAll by vm.tasksForAll.collectAsState()
+    val staff by vm.staff.collectAsState()
+    val error by vm.errorMessage.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showComments by remember { mutableStateOf<Task?>(null) }
+    var showEditTask by remember { mutableStateOf<Pair<Task, String>?>(null) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Tasks For All", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, "Add Task", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        if (tasksForAll.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No tasks yet", color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val doneTasks = tasksForAll.filter { it.isDone }
+                val pendingTasks = tasksForAll.filter { !it.isDone }
+
+                items(pendingTasks, key = { it.id }) { task ->
+                    TaskRow(task, "tasks_for_all", null, user, true, vm,
+                        onShowComments = { showComments = it },
+                        onEditTask = { showEditTask = it to "tasks_for_all" })
+                }
+
+                if (doneTasks.isNotEmpty()) {
+                    item {
+                        CompletedToggle(doneTasks, "tasks_for_all", null, user, true, vm,
+                            onShowComments = { showComments = it },
+                            onEditTask = { showEditTask = it to "tasks_for_all" })
+                    }
+                }
             }
         }
     }
 
-    if (showProfileDialog) {
-        EditProfileDialog(profile = profile, vm = vm, onDismiss = { showProfileDialog = false })
+    if (showAddDialog) {
+        AddTaskForAllDialog(vm, user) { showAddDialog = false }
     }
 
-    commentState?.let { state ->
-        CommentsDialog(task = state.task, taskType = state.taskType, projectId = state.projectId,
-            currentUserEmail = user.email ?: "", vm = vm, onDismiss = { commentState = null })
+    showComments?.let { task ->
+        CommentsDialog(task, "tasks_for_all", null, user.email ?: "", vm) { showComments = null }
     }
 
-    editTaskState?.let { state ->
-        EditTaskDialog(task = state.task, taskType = state.taskType, projectId = state.projectId,
-            vm = vm, profile = profile, staff = if (vm.staff.collectAsState().value.isNotEmpty())
-                vm.staff.collectAsState().value else emptyList(),
-            currentUserEmail = user.email ?: "", onDismiss = { editTaskState = null })
+    showEditTask?.let { (task, taskType) ->
+        EditTaskDialog(task, taskType, null, user, true, vm) { showEditTask = null }
     }
 }
 
-data class CommentDialogState(val task: Task, val taskType: String, val projectId: String?)
-data class EditTaskDialogState(val task: Task, val taskType: String, val projectId: String?)
+@Composable
+fun AddTaskForAllDialog(vm: AppViewModel, user: FirebaseUser, onDismiss: () -> Unit) {
+    var desc by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
 
-// ─── Tasks Page ───────────────────────────────────────────────────────────────
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Task For All") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = desc,
+                    onValueChange = { desc = it; error = null },
+                    label = { Text("Task Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (desc.isBlank()) {
+                    error = "Description is required"
+                } else {
+                    vm.addTaskForAll(desc, user.email ?: "")
+                    onDismiss()
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
 
 @Composable
-fun TasksPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile,
-              onShowComments: (Task, String, String?) -> Unit,
-              onEditTask: (Task, String, String?) -> Unit) {
-    val tasksForAll by vm.tasksForAll.collectAsState()
+fun IndividualTasksPage(vm: AppViewModel, user: FirebaseUser) {
     val tasks by vm.tasks.collectAsState()
     val staff by vm.staff.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showComments by remember { mutableStateOf<Task?>(null) }
+    var showEditTask by remember { mutableStateOf<Pair<Task, String>?>(null) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 12.dp)) {
-
-        // ── Tasks For All section ──
-        item {
-            SectionHeader("Tasks For All")
-        }
-        if (profile.isAdmin) {
-            item { AddTaskForAllForm(vm, user) }
-        }
-        items(tasksForAll.filter { !it.isDone }, key = { "tfa-todo-${it.id}" }) { task ->
-            TaskRow(task, "tasks_for_all", null, user, profile.isAdmin, vm, onShowComments, onEditTask)
-        }
-        val doneTfA = tasksForAll.filter { it.isDone }
-        if (doneTfA.isNotEmpty()) {
-            item { CompletedToggle("tasks_for_all", doneTfA, null, user, profile.isAdmin, vm, onShowComments, onEditTask) }
-        }
-
-        // ── Individual Tasks section ──
-        item { Spacer(Modifier.height(8.dp)); SectionHeader(if (profile.isAdmin) "Individual Tasks (All Staff)" else "My Individual Tasks") }
-
-        if (profile.isAdmin) {
-            // Admin: assign task form
-            item { AdminAssignIndividualTaskForm(vm, staff, user) }
-            // Grouped by staff
-            val staffList = staff
-            if (staffList.isEmpty()) {
-                item { Text("No staff added yet. Add staff in Settings.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(0.6f), modifier = Modifier.padding(8.dp)) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Individual Tasks", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, "Add Task", tint = MaterialTheme.colorScheme.primary)
             }
-            staffList.forEach { staffMember ->
-                val staffTasks = tasks.filter { it.assigneeEmail == staffMember.email }
-                item { Text(staffMember.name, style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)) }
-                items(staffTasks.filter { !it.isDone }, key = { "itask-todo-${staffMember.email}-${it.id}" }) { task ->
-                    TaskRow(task, "tasks", null, user, profile.isAdmin, vm, onShowComments, onEditTask)
+        }
+
+        if (tasks.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No individual tasks", color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val doneTasks = tasks.filter { it.isDone }
+                val pendingTasks = tasks.filter { !it.isDone }
+
+                items(pendingTasks, key = { it.id }) { task ->
+                    TaskRow(task, "tasks", null, user, true, vm,
+                        onShowComments = { showComments = it },
+                        onEditTask = { showEditTask = it to "tasks" })
                 }
-                val doneTasks = staffTasks.filter { it.isDone }
+
                 if (doneTasks.isNotEmpty()) {
-                    item { CompletedToggle("tasks", doneTasks, null, user, profile.isAdmin, vm, onShowComments, onEditTask) }
-                }
-                if (staffTasks.isEmpty()) {
-                    item { Text("No tasks.", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.5f), modifier = Modifier.padding(4.dp)) }
-                }
-            }
-        } else {
-            // User: own tasks
-            item { UserAddIndividualTaskForm(vm, user) }
-            items(tasks.filter { !it.isDone }, key = { "mytask-todo-${it.id}" }) { task ->
-                TaskRow(task, "tasks", null, user, false, vm, onShowComments, onEditTask)
-            }
-            val myDone = tasks.filter { it.isDone }
-            if (myDone.isNotEmpty()) {
-                item { CompletedToggle("tasks", myDone, null, user, false, vm, onShowComments, onEditTask) }
-            }
-        }
-    }
-}
-
-@Composable
-fun AddTaskForAllForm(vm: AppViewModel, user: FirebaseUser) {
-    var desc by remember { mutableStateOf("") }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = desc, onValueChange = { desc = it },
-                label = { Text("New shared task…") }, modifier = Modifier.weight(1f), singleLine = true)
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = {
-                vm.addTaskForAll(desc, user.email ?: ""); desc = ""
-            }) { Text("Add") }
-        }
-    }
-}
-
-@Composable
-fun AdminAssignIndividualTaskForm(vm: AppViewModel, staff: List<Staff>, user: FirebaseUser) {
-    if (staff.isEmpty()) return
-    var desc by remember { mutableStateOf("") }
-    var selectedStaff by remember(staff) { mutableStateOf(staff.firstOrNull()) }
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text("Assign Individual Task", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            OutlinedTextField(value = desc, onValueChange = { desc = it },
-                label = { Text("Task description") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(4.dp))
-            Box {
-                OutlinedTextField(value = selectedStaff?.name ?: "Select staff", onValueChange = {},
-                    label = { Text("Assign to") }, modifier = Modifier.fillMaxWidth(),
-                    readOnly = true, trailingIcon = { Icon(Icons.Default.ArrowDropDown, null,
-                        modifier = Modifier.clickable { expanded = true }) })
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    staff.forEach { s ->
-                        DropdownMenuItem(text = { Text(s.name) }, onClick = { selectedStaff = s; expanded = false })
+                    item {
+                        CompletedToggle(doneTasks, "tasks", null, user, true, vm,
+                            onShowComments = { showComments = it },
+                            onEditTask = { showEditTask = it to "tasks" })
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Button(onClick = {
-                selectedStaff?.let { vm.addIndividualTask(desc, it.email, creatorEmail = user.email ?: "") }
-                desc = ""
-            }, modifier = Modifier.fillMaxWidth()) { Text("Assign Task") }
         }
+    }
+
+    if (showAddDialog) {
+        AddIndividualTaskDialog(vm, user) { showAddDialog = false }
+    }
+
+    showComments?.let { task ->
+        CommentsDialog(task, "tasks", null, user.email ?: "", vm) { showComments = null }
+    }
+
+    showEditTask?.let { (task, taskType) ->
+        EditTaskDialog(task, taskType, null, user, true, vm) { showEditTask = null }
     }
 }
 
 @Composable
-fun UserAddIndividualTaskForm(vm: AppViewModel, user: FirebaseUser) {
-    var desc by remember { mutableStateOf("") }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = desc, onValueChange = { desc = it },
-                label = { Text("Add a task for myself…") }, modifier = Modifier.weight(1f), singleLine = true)
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = {
-                vm.addIndividualTask(desc, user.email ?: "", creatorEmail = user.email ?: ""); desc = ""
-            }) { Text("Add") }
-        }
-    }
-}
-
-// ─── Projects Page ────────────────────────────────────────────────────────────
-
-@Composable
-fun ProjectsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile,
-                 onShowComments: (Task, String, String?) -> Unit,
-                 onEditTask: (Task, String, String?) -> Unit) {
-    val projects by vm.projects.collectAsState()
+fun AddIndividualTaskDialog(vm: AppViewModel, user: FirebaseUser, onDismiss: () -> Unit) {
     val staff by vm.staff.collectAsState()
-
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 12.dp)) {
-
-        if (profile.isAdmin) {
-            item { SectionHeader(if (profile.isAdmin) "All Projects" else "My Assigned Projects") }
-            item { CreateProjectForm(vm, staff) }
-        } else {
-            item { SectionHeader("My Assigned Projects") }
-        }
-
-        if (projects.isEmpty()) {
-            item {
-                Text(if (profile.isAdmin) "No projects created yet." else "You are not assigned to any projects.",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
-                    modifier = Modifier.padding(8.dp))
-            }
-        }
-
-        items(projects, key = { it.id }) { project ->
-            ProjectCard(project, vm, user, profile, staff, onShowComments, onEditTask)
-        }
-    }
-}
-
-@Composable
-fun CreateProjectForm(vm: AppViewModel, staff: List<Staff>) {
-    var projectName by remember { mutableStateOf("") }
-    val selectedMembers = remember { mutableStateListOf<String>() }
-    var expanded by remember { mutableStateOf(true) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = !expanded }) {
-                Text("Create New Project", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
-            }
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = projectName, onValueChange = { projectName = it },
-                    label = { Text("Project name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                if (staff.isEmpty()) {
-                    Text("Add staff first in Settings.", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
-                } else {
-                    Text("Select members:", style = MaterialTheme.typography.labelMedium)
-                    staff.forEach { s ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable {
-                            if (selectedMembers.contains(s.email)) selectedMembers.remove(s.email)
-                            else selectedMembers.add(s.email)
-                        }) {
-                            Checkbox(checked = selectedMembers.contains(s.email), onCheckedChange = { checked ->
-                                if (checked) selectedMembers.add(s.email) else selectedMembers.remove(s.email)
-                            })
-                            Text(s.name, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = {
-                    if (projectName.isNotBlank() && selectedMembers.isNotEmpty()) {
-                        vm.createProject(projectName, selectedMembers.toList())
-                        projectName = ""; selectedMembers.clear()
-                    }
-                }, modifier = Modifier.fillMaxWidth()) { Text("Create Project") }
-            }
-        }
-    }
-}
-
-@Composable
-fun ProjectCard(project: Project, vm: AppViewModel, user: FirebaseUser, profile: UserProfile,
-                staff: List<Staff>, onShowComments: (Task, String, String?) -> Unit,
-                onEditTask: (Task, String, String?) -> Unit) {
-    LaunchedEffect(project.id) {
-        vm.listenProjectTasks(project.id, user.email, profile.isAdmin)
-    }
-    val allProjectTasks by vm.projectTasks.collectAsState()
-    val projectTasks = allProjectTasks[project.id] ?: emptyList()
-    var expanded by remember { mutableStateOf(true) }
-    var editingName by remember { mutableStateOf(false) }
-    var editedName by remember { mutableStateOf(project.name) }
-    val pendingCount = projectTasks.count { !it.isDone }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f).clickable { expanded = !expanded }) {
-                    Text(project.name, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("$pendingCount pending", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
-                }
-                if (profile.isAdmin) {
-                    TextButton(onClick = { editingName = true }) { Text("Edit") }
-                    TextButton(onClick = { vm.deleteProject(project.id) },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text("Delete")
-                    }
-                }
-                IconButton(onClick = { expanded = !expanded }) {
-                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
-                }
-            }
-
-            if (editingName) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = editedName, onValueChange = { editedName = it },
-                        modifier = Modifier.weight(1f), singleLine = true)
-                    TextButton(onClick = {
-                        vm.editProject(project.id, editedName); editingName = false
-                    }) { Text("Save") }
-                    TextButton(onClick = { editingName = false; editedName = project.name }) { Text("Cancel") }
-                }
-            }
-
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                if (profile.isAdmin) {
-                    // Admin: assign per member
-                    val members = staff.filter { project.members.contains(it.email) }
-                    AdminProjectTaskForm(project.id, members, vm, user)
-                    Spacer(Modifier.height(8.dp))
-                    members.forEach { member ->
-                        val memberTasks = projectTasks.filter { it.assigneeEmail == member.email }
-                        Text(member.name, style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                        memberTasks.filter { !it.isDone }.forEach { task ->
-                            TaskRow(task, "project", project.id, user, true, vm, onShowComments, onEditTask)
-                        }
-                        val done = memberTasks.filter { it.isDone }
-                        if (done.isNotEmpty()) CompletedToggle("project", done, project.id, user, true, vm, onShowComments, onEditTask)
-                        if (memberTasks.isEmpty()) {
-                            Text("No tasks.", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(0.5f), modifier = Modifier.padding(4.dp))
-                        }
-                    }
-                } else {
-                    // User: own tasks + add form
-                    UserProjectTaskForm(project.id, vm, user)
-                    Spacer(Modifier.height(4.dp))
-                    projectTasks.filter { !it.isDone }.forEach { task ->
-                        TaskRow(task, "project", project.id, user, false, vm, onShowComments, onEditTask)
-                    }
-                    val done = projectTasks.filter { it.isDone }
-                    if (done.isNotEmpty()) CompletedToggle("project", done, project.id, user, false, vm, onShowComments, onEditTask)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AdminProjectTaskForm(projectId: String, members: List<Staff>, vm: AppViewModel, user: FirebaseUser) {
-    if (members.isEmpty()) return
     var desc by remember { mutableStateOf("") }
-    var selectedMember by remember(members) { mutableStateOf(members.firstOrNull()) }
-    var expanded by remember { mutableStateOf(false) }
+    var selectedStaff by remember { mutableStateOf<Staff?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
-    Column {
-        Text("Assign Project Task", style = MaterialTheme.typography.labelLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = desc, onValueChange = { desc = it },
-                label = { Text("Task description") }, modifier = Modifier.weight(1f), singleLine = true)
-            Spacer(Modifier.width(4.dp))
-            Box {
-                OutlinedTextField(value = selectedMember?.name ?: "", onValueChange = {},
-                    readOnly = true, modifier = Modifier.width(140.dp),
-                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.clickable { expanded = true }) })
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    members.forEach { m ->
-                        DropdownMenuItem(text = { Text(m.name) }, onClick = { selectedMember = m; expanded = false })
-                    }
-                }
-            }
-        }
-        Button(onClick = {
-            selectedMember?.let { vm.addProjectTask(projectId, desc, it.email, creatorEmail = user.email ?: "") }
-            desc = ""
-        }, modifier = Modifier.fillMaxWidth()) { Text("Assign Task") }
-    }
-}
-
-@Composable
-fun UserProjectTaskForm(projectId: String, vm: AppViewModel, user: FirebaseUser) {
-    var desc by remember { mutableStateOf("") }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(value = desc, onValueChange = { desc = it },
-            label = { Text("Add task for this project…") }, modifier = Modifier.weight(1f), singleLine = true)
-        Spacer(Modifier.width(8.dp))
-        Button(onClick = {
-            vm.addProjectTask(projectId, desc, user.email ?: "", creatorEmail = user.email ?: ""); desc = ""
-        }) { Text("Add") }
-    }
-}
-
-// ─── Settings Page ────────────────────────────────────────────────────────────
-
-@Composable
-fun SettingsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
-    val staff by vm.staff.collectAsState()
-    var newName by remember { mutableStateOf("") }
-    var newEmail by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var submitError by remember { mutableStateOf<String?>(null) }
-    var editingStaff by remember { mutableStateOf<Staff?>(null) }
-    var removingStaff by remember { mutableStateOf<Staff?>(null) }
-
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        contentPadding = PaddingValues(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { SectionHeader(if (profile.isAdmin) "Sub User Management" else "Profile") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    if (profile.isAdmin) {
-                        Text("Add New Sub User", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        OutlinedTextField(value = newName, onValueChange = { newName = it; submitError = null },
-                            label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        Spacer(Modifier.height(4.dp))
-                        OutlinedTextField(value = newEmail, onValueChange = { newEmail = it; submitError = null },
-                            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                        Spacer(Modifier.height(4.dp))
-                        OutlinedTextField(value = newPassword, onValueChange = { newPassword = it; submitError = null },
-                            label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            visualTransformation = PasswordVisualTransformation())
-                        if (submitError != null) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(submitError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
-                            vm.createSubUser(newName, newEmail, newPassword, user.email ?: "") { err ->
-                                submitError = err
-                                if (err == null) {
-                                    newName = ""
-                                    newEmail = ""
-                                    newPassword = ""
-                                }
-                            }
-                        }, modifier = Modifier.fillMaxWidth()) { Text("Save Sub User") }
-                    } else {
-                        Text("Your account is managed by the admin.", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(profile.displayName, fontWeight = FontWeight.SemiBold)
-                        Text(profile.email, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
-                    }
-                }
-            }
-        }
-        if (profile.isAdmin) {
-            item { Text("Existing Sub Users", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
-            items(staff, key = { it.id }) { s ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(s.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Individual Task") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = desc,
+                    onValueChange = { desc = it; error = null },
+                    label = { Text("Task Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Assign To", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                
+                val allUsers = staff + Staff(name = user.email?.substringBefore('@') ?: "Me", email = user.email ?: "")
+                allUsers.forEach { s ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { selectedStaff = s }.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = selectedStaff == s, onClick = { selectedStaff = s })
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(s.name, fontWeight = FontWeight.Medium)
                             Text(s.email, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { editingStaff = s }) {
-                                Text("Edit")
-                            }
-                            TextButton(onClick = { removingStaff = s }) {
-                                Text("Remove", color = MaterialTheme.colorScheme.error)
-                            }
+                    }
+                }
+
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                when {
+                    desc.isBlank() -> error = "Description is required"
+                    selectedStaff == null -> error = "Select an assignee"
+                    else -> {
+                        vm.addIndividualTask(desc, selectedStaff!!.email, creatorEmail = user.email ?: "")
+                        onDismiss()
+                    }
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+fun ProjectsPage(vm: AppViewModel, user: FirebaseUser) {
+    val projects by vm.projects.collectAsState()
+    val staff by vm.staff.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var expandedProjectId by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("All Projects", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, "Add Project", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        if (projects.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No projects yet", color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(projects, key = { it.id }) { project ->
+                    ProjectCard(project, vm, user, expandedProjectId, onExpandChange = { id ->
+                        expandedProjectId = if (expandedProjectId == id) null else id
+                    })
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddProjectDialog(vm, staff, user) { showAddDialog = false }
+    }
+}
+
+@Composable
+fun ProjectCard(project: Project, vm: AppViewModel, user: FirebaseUser,
+                expandedProjectId: String?, onExpandChange: (String) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().clickable { onExpandChange(project.id) }.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(project.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                IconButton(onClick = { vm.deleteProject(project.id, "abcd") { } }) {
+                    Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error)
+                }
+            }
+            if (expandedProjectId == project.id) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text("Members:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                project.members.forEach { member ->
+                    Text("• $member", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddProjectDialog(vm: AppViewModel, staff: List<Staff>, user: FirebaseUser, onDismiss: () -> Unit) {
+    var projectName by remember { mutableStateOf("") }
+    var selectedMembers by remember { mutableStateOf(setOf<String>()) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New Project") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = projectName,
+                    onValueChange = { projectName = it; error = null },
+                    label = { Text("Project Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("Select Members", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                
+                val allUsers = staff + Staff(name = user.email?.substringBefore('@') ?: "Me", email = user.email ?: "")
+                allUsers.forEach { s ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            selectedMembers = if (selectedMembers.contains(s.email))
+                                selectedMembers - s.email else selectedMembers + s.email
+                        }.padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = selectedMembers.contains(s.email), onCheckedChange = {
+                            selectedMembers = if (selectedMembers.contains(s.email))
+                                selectedMembers - s.email else selectedMembers + s.email
+                        })
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(s.name, fontWeight = FontWeight.Medium)
+                            Text(s.email, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
                         }
                     }
                 }
+
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                when {
+                    projectName.isBlank() -> error = "Project name is required"
+                    selectedMembers.isEmpty() -> error = "Select at least one member"
+                    else -> {
+                        vm.createProject(projectName, selectedMembers.toList())
+                        onDismiss()
+                    }
+                }
+            }) { Text("Create") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+fun UserProfilePage(profile: UserProfile, vm: AppViewModel, onBack: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(Icons.Default.Person, null, modifier = Modifier.size(64.dp).align(Alignment.CenterHorizontally),
+            tint = MaterialTheme.colorScheme.primary)
+        
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ProfileInfoRow("Name", profile.displayName)
+                HorizontalDivider()
+                ProfileInfoRow("Email", profile.email)
+                HorizontalDivider()
+                ProfileInfoRow("Role", if (profile.isAdmin) "Admin" else "User")
+                HorizontalDivider()
+                ProfileInfoRow("Status", if (profile.active) "Active" else "Inactive")
             }
         }
-        if (profile.isAdmin && staff.isEmpty()) {
-            item {
-                Text("No sub users added yet.", style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(0.6f), modifier = Modifier.padding(8.dp))
-            }
+
+        Spacer(Modifier.weight(1f))
+
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("Back")
         }
     }
+}
 
-    editingStaff?.let { staffMember ->
-        EditSubUserDialog(staff = staffMember, vm = vm, onDismiss = { editingStaff = null })
+@Composable
+fun ProfileInfoRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
-
-    removingStaff?.let { staffMember ->
-        RemoveSubUserDialog(staff = staffMember, vm = vm, onDismiss = { removingStaff = null })
-    }
-}
-
-@Composable
-fun EditSubUserDialog(staff: Staff, vm: AppViewModel, onDismiss: () -> Unit) {
-    var name by remember(staff.id) { mutableStateOf(staff.name) }
-    var password by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Sub User") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; error = null },
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = staff.email,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it; error = null },
-                    label = { Text("Admin Password") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                vm.editSubUser(staff, name, password) { err ->
-                    error = err
-                    if (err == null) onDismiss()
-                }
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-fun RemoveSubUserDialog(staff: Staff, vm: AppViewModel, onDismiss: () -> Unit) {
-    var password by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Remove Sub User") },
-        text = {
-            Column {
-                Text("Remove ${staff.name} from this admin team? Their app access will be disabled.")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it; error = null },
-                    label = { Text("Admin Password") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                vm.removeSubUser(staff, password) { err ->
-                    error = err
-                    if (err == null) onDismiss()
-                }
-            }) { Text("Remove") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-fun EditProfileDialog(profile: UserProfile, vm: AppViewModel, onDismiss: () -> Unit) {
-    var name by remember(profile.name, profile.email) { mutableStateOf(profile.displayName) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Profile") },
-        text = {
-            Column {
-                OutlinedTextField(value = name, onValueChange = { name = it; error = null },
-                    label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = profile.email, onValueChange = {}, readOnly = true,
-                    label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                vm.updateCurrentProfile(name) { err ->
-                    error = err
-                    if (err == null) onDismiss()
-                }
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-// ─── Shared Components ────────────────────────────────────────────────────────
-
-@Composable
-fun SectionHeader(title: String) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 4.dp))
-    HorizontalDivider()
-    Spacer(Modifier.height(4.dp))
 }
 
 @Composable
 fun TaskRow(task: Task, taskType: String, projectId: String?, user: FirebaseUser,
             isAdmin: Boolean, vm: AppViewModel,
-            onShowComments: (Task, String, String?) -> Unit,
-            onEditTask: (Task, String, String?) -> Unit) {
+            onShowComments: (Task) -> Unit,
+            onEditTask: (Task, String) -> Unit) {
     val isDone = task.isDone
     var showDeleteDialog by remember(task.id) { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
@@ -883,15 +596,14 @@ fun TaskRow(task: Task, taskType: String, projectId: String?, user: FirebaseUser
                     color = MaterialTheme.colorScheme.onSurface.copy(0.45f))
             }
         }
-        // Action buttons
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onShowComments(task, taskType, projectId) }, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = { onShowComments(task) }, modifier = Modifier.size(32.dp)) {
                 BadgedBox(badge = {
                     if (task.comments.isNotEmpty()) Badge { Text("${task.comments.size}") }
                 }) { Icon(Icons.Default.Comment, "Comments", modifier = Modifier.size(18.dp)) }
             }
             if (isAdmin || task.assigneeEmail == user.email) {
-                IconButton(onClick = { onEditTask(task, taskType, projectId) }, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { onEditTask(task, taskType) }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Edit, "Edit", modifier = Modifier.size(18.dp))
                 }
             }
@@ -905,59 +617,15 @@ fun TaskRow(task: Task, taskType: String, projectId: String?, user: FirebaseUser
     }
 
     if (showDeleteDialog) {
-        TaskDeletePasswordDialog(
-            task = task,
-            taskType = taskType,
-            projectId = projectId,
-            vm = vm,
-            onDismiss = { showDeleteDialog = false }
-        )
+        TaskDeletePasswordDialog(task, taskType, projectId, vm) { showDeleteDialog = false }
     }
 }
 
 @Composable
-fun TaskDeletePasswordDialog(task: Task, taskType: String, projectId: String?, vm: AppViewModel, onDismiss: () -> Unit) {
-    var password by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Task") },
-        text = {
-            Column {
-                Text("Enter admin password to delete this task.")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it; error = null },
-                    label = { Text("Admin Password") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                vm.deleteTask(task.id, taskType, projectId, password) { err ->
-                    error = err
-                    if (err == null) onDismiss()
-                }
-            }) { Text("Delete") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-fun CompletedToggle(taskType: String, doneTasks: List<Task>, projectId: String?,
+fun CompletedToggle(doneTasks: List<Task>, taskType: String, projectId: String?,
                     user: FirebaseUser, isAdmin: Boolean, vm: AppViewModel,
-                    onShowComments: (Task, String, String?) -> Unit,
-                    onEditTask: (Task, String, String?) -> Unit) {
+                    onShowComments: (Task) -> Unit,
+                    onEditTask: (Task, String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     TextButton(onClick = { expanded = !expanded }) {
         Text("${if (expanded) "Hide" else "Show"} ${doneTasks.size} Completed",
@@ -969,8 +637,6 @@ fun CompletedToggle(taskType: String, doneTasks: List<Task>, projectId: String?,
         }
     }
 }
-
-// ─── Dialogs ──────────────────────────────────────────────────────────────────
 
 @Composable
 fun CommentsDialog(task: Task, taskType: String, projectId: String?,
@@ -1019,69 +685,195 @@ fun CommentsDialog(task: Task, taskType: String, projectId: String?,
 }
 
 @Composable
-fun EditTaskDialog(task: Task, taskType: String, projectId: String?,
-                   vm: AppViewModel, profile: UserProfile, staff: List<Staff>,
-                   currentUserEmail: String, onDismiss: () -> Unit) {
-    var description by remember { mutableStateOf(task.description) }
-    var assigneeEmail by remember { mutableStateOf(task.assigneeEmail) }
-    var staffDropdownExpanded by remember { mutableStateOf(false) }
+fun EditTaskDialog(task: Task, taskType: String, projectId: String?, user: FirebaseUser,
+                   isAdmin: Boolean, vm: AppViewModel, onDismiss: () -> Unit) {
+    var description by remember(task.id) { mutableStateOf(task.description) }
+    var dueDate by remember(task.id) { mutableStateOf(task.dueDate ?: "") }
+    var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Task") },
         text = {
             Column {
-                OutlinedTextField(value = description, onValueChange = { description = it },
-                    label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
-                if (profile.isAdmin && taskType != "tasks_for_all" && staff.isNotEmpty()) {
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it; error = null },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = dueDate,
+                    onValueChange = { dueDate = it; error = null },
+                    label = { Text("Due Date (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (error != null) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Assignee", style = MaterialTheme.typography.labelMedium)
-                    val selectedStaffName = staff.find { it.email == assigneeEmail }?.name ?: assigneeEmail
-                    Box {
-                        OutlinedTextField(value = selectedStaffName, onValueChange = {},
-                            readOnly = true, modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null,
-                                modifier = Modifier.clickable { staffDropdownExpanded = true }) })
-                        DropdownMenu(expanded = staffDropdownExpanded, onDismissRequest = { staffDropdownExpanded = false }) {
-                            staff.forEach { s ->
-                                DropdownMenuItem(text = { Text(s.name) }, onClick = {
-                                    assigneeEmail = s.email; staffDropdownExpanded = false
-                                })
-                            }
-                        }
-                    }
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
         confirmButton = {
             Button(onClick = {
-                vm.editTask(task.id, taskType, projectId, description, task.dueDate,
-                    task.repeatType, task.repeatRemaining,
-                    if (profile.isAdmin) assigneeEmail else null,
-                    currentUserEmail, profile.isAdmin)
-                onDismiss()
+                if (description.isBlank()) {
+                    error = "Description is required"
+                } else {
+                    vm.editTask(task.id, taskType, projectId, description, dueDate.ifBlank { null },
+                        "none", null, null, user.email ?: "", isAdmin)
+                    onDismiss()
+                }
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+@Composable
+fun TaskDeletePasswordDialog(task: Task, taskType: String, projectId: String?,
+                             vm: AppViewModel, onDismiss: () -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
 
-fun formatDueDate(dueDate: String?): String {
-    if (dueDate.isNullOrEmpty()) return ""
-    return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
-        val date = sdf.parse(dueDate) ?: return dueDate
-        SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(date)
-    } catch (e: Exception) { dueDate }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Task") },
+        text = {
+            Column {
+                Text("Enter admin password to delete this task.")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    label = { Text("Admin Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                vm.deleteTask(task.id, taskType, projectId, password) { err ->
+                    error = err
+                    if (err == null) onDismiss()
+                }
+            }) { Text("Delete") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+@Composable
+fun AuthScreen(vm: AppViewModel) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isSignUp by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    var showAdminSignupConfirm by remember { mutableStateOf(false) }
+    val selfRegistrationAllowed by vm.selfRegistrationAllowed.collectAsState()
+    val globalError by vm.errorMessage.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Assignment, null, modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
+            tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(12.dp))
+        Text("Project & Task Board", style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(
+            when {
+                selfRegistrationAllowed == null -> "Checking workspace access..."
+                isSignUp -> "You are creating a full new admin account"
+                else -> "Sign in to manage your team"
+            },
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
+            modifier = Modifier.align(Alignment.CenterHorizontally))
+        Spacer(Modifier.height(24.dp))
+
+        globalError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+        }
+
+        OutlinedTextField(value = email, onValueChange = { email = it; errorMsg = null },
+            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(value = password, onValueChange = { password = it; errorMsg = null },
+            label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            visualTransformation = PasswordVisualTransformation())
+        if (errorMsg != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(errorMsg!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(16.dp))
+
+        Button(onClick = {
+            if (isSignUp) {
+                showAdminSignupConfirm = true
+            } else {
+                vm.signIn(email, password) { err -> errorMsg = err }
+            }
+        }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (isSignUp) "Create Admin Account" else "Sign In")
+        }
+
+        TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Text(if (isSignUp) "Already have an account? Sign in" else "Don't have an account? Create one")
+        }
+    }
+
+    if (showAdminSignupConfirm) {
+        AlertDialog(
+            onDismissRequest = { showAdminSignupConfirm = false },
+            title = { Text("Create Admin Account") },
+            text = { Text("You are about to create a new admin account. Only proceed if you are authorized to do so.") },
+            confirmButton = {
+                Button(onClick = {
+                    vm.signUp(email, password) { err -> errorMsg = err }
+                    showAdminSignupConfirm = false
+                }) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdminSignupConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
 
 fun isOverdue(dueDate: String?): Boolean {
     if (dueDate.isNullOrEmpty()) return false
     return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
-        val date = sdf.parse(dueDate) ?: return false
-        date.before(Date())
-    } catch (e: Exception) { false }
+        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+        val due = formatter.parse(dueDate) ?: return false
+        due.before(Date())
+    } catch (e: Exception) {
+        false
+    }
+}
+
+fun formatDueDate(dueDate: String?): String {
+    if (dueDate.isNullOrEmpty()) return ""
+    return try {
+        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+        val date = formatter.parse(dueDate) ?: return dueDate
+        val display = SimpleDateFormat("MMM dd, yyyy · hh:mm a", Locale.getDefault())
+        display.format(date)
+    } catch (e: Exception) {
+        dueDate
+    }
 }
