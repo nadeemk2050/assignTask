@@ -27,12 +27,11 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         val apps = FirebaseApp.getApps(application)
         if (apps.isEmpty()) {
             _status.value = "Firebase not configured in APK. Add google-services.json and rebuild."
-            return
+        } else {
+            tasksRef = Firebase.firestore.collection("tasks")
+            _status.value = "Connected to Firebase project: assigntask-51813"
+            listenForTasks()
         }
-
-        tasksRef = Firebase.firestore.collection("tasks")
-        _status.value = "Connected to Firebase project: assigntask-51813"
-        listenForTasks()
     }
 
     private fun listenForTasks() {
