@@ -30,13 +30,17 @@ data class Project(
 data class Staff(
     val id: String = "",
     val name: String = "",
-    val email: String = ""
+    val email: String = "",
+    val uid: String = ""
 )
 
 data class UserProfile(
+    val name: String = "",
     val email: String = "",
-    val role: String = "user"
+    val role: String = "user",
+    val active: Boolean = true
 ) {
     val isAdmin: Boolean get() = role == "admin"
+    val displayName: String get() = name.ifBlank { email.substringBefore('@') }
 }
 

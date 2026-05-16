@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project & Task Board</title>
+    <!-- PWA Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Firebase JS SDKs -->
@@ -24,9 +27,12 @@
         .nav-button:not(.active) { background-color: #e5e7eb; color: #374151; }
         .task-meta { font-size: 10px; color: #6b7280; margin-top: 4px; }
         .repeat-icon-button { background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; vertical-align: middle; }
-        .repeat-icon { width: 12px; height: 12px; display: inline-block; margin-left: 6px; color: #9ca3af; }
+        .repeat-icon, .alarm-icon { width: 12px; height: 12px; display: inline-block; margin-left: 6px; color: #9ca3af; }
         .project-title.clickable { cursor: pointer; }
         .project-title.clickable:hover { color: #2563eb; }
+        .section-header, .staff-header { cursor: pointer; }
+        .notification-bell { position: relative; }
+        .notification-dot { position: absolute; top: 0; right: 0; width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; border: 1px solid white; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
@@ -64,12 +70,26 @@
                         <div id="user-info-badge" class="mt-1 text-xs text-white inline-flex items-center gap-2 px-2 py-1 rounded"></div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button id="settings-button" class="p-2 rounded-full hover:bg-gray-200 hidden">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                         <!-- Notification Bell -->
+                        <button id="notification-bell-button" class="notification-bell p-2 rounded-full hover:bg-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            <div id="notification-dot" class="notification-dot hidden"></div>
                         </button>
-                        <button id="logout-button" class="p-2 rounded-full hover:bg-red-100 text-red-500">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <!-- PWA Install Button -->
+                        <button id="install-button" class="hidden bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600 transition-colors flex items-center gap-2 shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Install
                         </button>
+                        <div class="relative">
+                            <button id="account-menu-button" class="p-2 rounded-full hover:bg-gray-200 text-gray-700" aria-label="Account menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                            </button>
+                            <div id="account-menu" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-30">
+                                <button id="menu-edit-profile" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100">Edit Profile</button>
+                                <button id="menu-add-subusers" class="hidden w-full text-left px-4 py-2 text-sm hover:bg-gray-100">Add Sub Users</button>
+                                <button id="menu-logout" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">Logout</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="bg-gray-200 p-1 rounded-lg flex gap-1">
@@ -98,8 +118,8 @@
                     </div>
 
                     <div id="admin-assign-task-container" class="hidden">
-                        <h2 class="text-2xl font-bold mb-4">Assign Individual Task</h2>
-                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h2 id="assign-task-header" class="section-header text-2xl font-bold mb-4">Assign Individual Task</h2>
+                        <div id="assign-task-form-container" class="bg-white p-6 rounded-xl shadow-sm hidden">
                             <form id="assign-individual-task-form" class="space-y-4">
                                 <input type="text" id="individual-task-description" placeholder="Task description..." class="p-2 border rounded-lg w-full" required />
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -124,6 +144,20 @@
                                     </div>
                                 </div>
                                 <input type="datetime-local" id="individual-task-duedate" class="p-2 border rounded-lg w-full" />
+                                <div class="flex items-center gap-4">
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="individual-task-alarm" class="new-task-alarm h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <label for="individual-task-alarm" class="text-sm font-medium text-gray-700">Set Alarm</label>
+                                    </div>
+                                    <div class="flex-grow">
+                                        <label class="text-sm font-medium text-gray-700">Alarm Sound</label>
+                                        <select class="new-task-alarm-sound mt-1 p-2 border rounded-lg bg-white w-full">
+                                            <option value="alarm_classic.mp3">Classic Alarm</option>
+                                            <option value="hurry_up.mp3">Hurry Up</option>
+                                            <option value="gentle_chime.mp3">Gentle Chime</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <button type="submit" class="w-full bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600">Assign Task</button>
                             </form>
                         </div>
@@ -138,8 +172,8 @@
                 <!-- Projects Section -->
                 <section id="projects-page" class="main-section hidden space-y-8">
                     <div id="admin-create-project-container" class="hidden">
-                         <h2 class="text-2xl font-bold mb-4">Create New Project</h2>
-                         <div id="create-project-section" class="bg-white p-6 rounded-xl shadow-sm">
+                         <h2 id="create-project-header" class="section-header text-2xl font-bold mb-4">Create New Project</h2>
+                         <div id="create-project-form-container" class="bg-white p-6 rounded-xl shadow-sm hidden">
                             <form id="create-project-form" class="space-y-4">
                                 <input type="text" id="new-project-name" placeholder="New Project Name" class="p-2 border rounded-lg w-full" required />
                                 <div>
@@ -160,13 +194,15 @@
                 <!-- Settings Section (Admin Only) -->
                 <section id="settings-page" class="main-section hidden space-y-8">
                     <div id="staff-management-section" class="bg-white p-6 rounded-xl shadow-sm">
-                        <h2 class="text-xl font-semibold mb-4">User Management</h2>
+                        <h2 class="text-xl font-semibold mb-4">Sub User Management</h2>
                         <div id="staff-list-container" class="max-h-64 overflow-y-auto pr-2"></div>
-                        <form id="add-staff-form" class="flex gap-2 mt-4">
-                            <input type="text" id="new-staff-name" placeholder="Name" class="p-2 border rounded-lg w-1/2" />
-                            <input type="email" id="new-staff-email" placeholder="Email" class="p-2 border rounded-lg w-1/2" />
-                            <button id="add-staff-button" type="submit" class="bg-green-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-green-600">+</button>
+                        <form id="add-staff-form" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+                            <input type="text" id="new-staff-name" placeholder="Name" class="p-2 border rounded-lg" />
+                            <input type="email" id="new-staff-email" placeholder="Email" class="p-2 border rounded-lg" />
+                            <input type="password" id="new-staff-password" placeholder="Password" minLength="6" class="p-2 border rounded-lg" />
+                            <button id="add-staff-button" type="submit" class="sm:col-span-3 bg-green-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-green-600">Save Sub User</button>
                         </form>
+                        <p id="subuser-form-message" class="hidden text-sm mt-3"></p>
                     </div>
                 </section>
             </main>
@@ -174,12 +210,32 @@
     </div>
     
     <!-- Modals -->
+    <div id="notification-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-800">Notifications</h3>
+                <button id="notification-modal-close" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
+            </div>
+            <div id="notification-list" class="p-6 max-h-80 overflow-y-auto"></div>
+        </div>
+    </div>
     <div id="comment-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
             <div class="p-6 border-b flex justify-between items-center"><h3 class="text-xl font-bold text-gray-800">Task Comments</h3><button id="comment-modal-close" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button></div>
             <p id="comment-modal-task-description" class="px-6 text-gray-600 text-sm mt-1 max-w-md"></p>
             <div id="comment-modal-list" class="p-6 h-80 overflow-y-auto"></div>
             <form id="comment-modal-form" class="p-6 bg-gray-50 rounded-b-xl flex gap-2"><input type="text" id="comment-modal-input" placeholder="Add a comment..." class="flex-grow p-2 border border-gray-300 rounded-lg" /><button type="submit" class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700">Send</button></form>
+        </div>
+    </div>
+    <div id="profile-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b flex justify-between items-center"><h3 class="text-xl font-bold text-gray-800">Edit Profile</h3><button id="profile-modal-close" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button></div>
+            <form id="profile-form" class="p-6 space-y-4">
+                <div><label class="text-sm font-medium text-gray-700">Name</label><input id="profile-name" type="text" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg" /></div>
+                <div><label class="text-sm font-medium text-gray-700">Email</label><input id="profile-email" type="email" readonly class="w-full mt-1 p-2 border border-gray-300 rounded-lg bg-gray-100" /></div>
+                <p id="profile-form-message" class="hidden text-sm"></p>
+                <div class="flex justify-end pt-2"><button type="submit" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700">Save Changes</button></div>
+            </form>
         </div>
     </div>
     <div id="edit-staff-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -220,6 +276,20 @@
                         <div class="edit-task-repeat-count-container hidden">
                            <input type="number" id="edit-task-repeat-count" class="p-2 border rounded-lg w-24" placeholder="Times" min="1">
                         </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                     <div class="flex items-center gap-2">
+                        <input type="checkbox" id="edit-task-alarm" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <label for="edit-task-alarm" class="text-sm font-medium text-gray-700">Set Alarm</label>
+                    </div>
+                    <div class="flex-grow">
+                        <label class="text-sm font-medium text-gray-700">Alarm Sound</label>
+                        <select id="edit-task-alarm-sound" class="mt-1 p-2 border rounded-lg bg-white w-full">
+                           <option value="alarm_classic.mp3">Classic Alarm</option>
+                           <option value="hurry_up.mp3">Hurry Up</option>
+                           <option value="gentle_chime.mp3">Gentle Chime</option>
+                        </select>
                     </div>
                 </div>
                 <div class="flex justify-end pt-2"><button type="submit" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700">Save Changes</button></div>
@@ -263,7 +333,6 @@
             <div id="repeat-details-list" class="p-6 max-h-80 overflow-y-auto"></div>
         </div>
     </div>
-    <!-- FEATURE: New Edit Project Modal -->
     <div id="edit-project-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md">
             <div class="p-6 border-b flex justify-between items-center">
@@ -284,6 +353,17 @@
     </div>
 
     <script>
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+          });
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Firebase Config
             const firebaseConfig = {
@@ -304,6 +384,8 @@
             let currentUserProfile = null;
             let currentUnsubscribes = [];
             let currentCommentingTask = null;
+            let alarmCheckInterval = null;
+            let selfRegistrationAllowed = null;
 
             // --- Element References ---
             const loadingIndicator = document.getElementById('loading-indicator');
@@ -313,11 +395,19 @@
             const authError = document.getElementById('auth-error');
             const authForm = document.getElementById('auth-form');
             const authToggle = document.getElementById('auth-toggle');
-            const logoutButton = document.getElementById('logout-button');
-            const settingsButton = document.getElementById('settings-button');
+            const authTitle = document.getElementById('auth-title');
+            const authSubtitle = document.getElementById('auth-subtitle');
+            const authButton = document.getElementById('auth-button');
+            const accountMenuButton = document.getElementById('account-menu-button');
+            const accountMenu = document.getElementById('account-menu');
+            const menuEditProfile = document.getElementById('menu-edit-profile');
+            const menuAddSubusers = document.getElementById('menu-add-subusers');
+            const menuLogout = document.getElementById('menu-logout');
             const navTasksButton = document.getElementById('nav-tasks-button');
             const navProjectsButton = document.getElementById('nav-projects-button');
-            
+            const installButton = document.getElementById('install-button');
+            const subuserFormMessage = document.getElementById('subuser-form-message');
+
             const projectsContainer = document.getElementById('projects-container');
             const projectsSectionTitle = document.getElementById('projects-section-title');
             const individualTasksContainer = document.getElementById('individual-tasks-container');
@@ -327,6 +417,8 @@
             
             // Modal Elements
             const commentModal = document.getElementById('comment-modal');
+            const notificationModal = document.getElementById('notification-modal');
+            const profileModal = document.getElementById('profile-modal');
             const editStaffModal = document.getElementById('edit-staff-modal');
             const editTaskModal = document.getElementById('edit-task-modal');
             const confirmModal = document.getElementById('confirm-modal');
@@ -335,12 +427,177 @@
             const editProjectModal = document.getElementById('edit-project-modal');
             const editTaskForm = document.getElementById('edit-task-form');
             const editProjectForm = document.getElementById('edit-project-form');
+            const profileForm = document.getElementById('profile-form');
+            const profileFormMessage = document.getElementById('profile-form-message');
+
+            // Collapsible Form Elements
+            const assignTaskHeader = document.getElementById('assign-task-header');
+            const assignTaskFormContainer = document.getElementById('assign-task-form-container');
+            const createProjectHeader = document.getElementById('create-project-header');
+            const createProjectFormContainer = document.getElementById('create-project-form-container');
+
+            // --- PWA Install Logic ---
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                if (!window.matchMedia('(display-mode: standalone)').matches) {
+                    installButton.classList.remove('hidden');
+                }
+            });
+
+            installButton.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    deferredPrompt = null;
+                    installButton.classList.add('hidden');
+                }
+            });
+
+            // --- Alarm Feature Logic ---
+            function checkAlarms(tasks) {
+                const now = new Date();
+                tasks.forEach(task => {
+                    if (task.setAlarm && task.dueDate && task.status === 'To Do') {
+                        const dueDate = new Date(task.dueDate);
+                        if (dueDate > now && dueDate - now < 60000) {
+                            if (!task.alarmTriggered) { 
+                                triggerAlarm(task);
+                            }
+                        }
+                    }
+                });
+            }
+
+            function triggerAlarm(task) {
+                console.log('ALARM TRIGGERED FOR:', task.description);
+                
+                const soundFile = task.alarmSound || 'alarm_classic.mp3';
+                const audio = new Audio(`/sounds/${soundFile}`); 
+                audio.play().catch(e => console.error("Error playing sound:", e));
+
+                if (Notification.permission === 'granted') {
+                    new Notification('Task Due!', {
+                        body: task.description,
+                        icon: 'icons/192.png' 
+                    });
+                }
+                
+                let docRef;
+                if (task.projectId) {
+                    docRef = db.collection(`/artifacts/${appId}/public/data/projects/${task.projectId}/tasks`).doc(task.id);
+                } else {
+                    docRef = db.collection(`/artifacts/${appId}/public/data/tasks`).doc(task.id);
+                }
+                docRef.update({ alarmTriggered: true });
+            }
+
+            function startAlarmChecker(tasks) {
+                if (alarmCheckInterval) clearInterval(alarmCheckInterval);
+                alarmCheckInterval = setInterval(() => checkAlarms(tasks), 30000);
+            }
 
             // --- Helper Functions ---
             function showAppError(message, error) {
                 console.error(message, error);
                 appError.textContent = `${message} Please check console. This may be a Firestore security rule issue.`;
                 appError.classList.remove('hidden');
+            }
+
+            function setInlineMessage(element, message, isError = false) {
+                if (!message) {
+                    element.textContent = '';
+                    element.className = 'hidden text-sm';
+                    return;
+                }
+                element.textContent = message;
+                element.className = `text-sm mt-3 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            }
+
+            function setAuthMode(mode) {
+                const isSignup = mode === 'signup';
+                authForm.dataset.view = isSignup ? 'signup' : 'login';
+                authTitle.textContent = isSignup ? 'Create Admin Account' : 'Sign In';
+                authButton.textContent = isSignup ? 'Create Account' : 'Sign In';
+                authToggle.textContent = isSignup ? 'Already have an account? Sign In' : 'Need an account? Sign Up';
+                authSubtitle.textContent = isSignup
+                    ? 'Create the first admin account'
+                    : (selfRegistrationAllowed ? 'Sign in to manage your team' : 'Sign in with an admin-created sub user account');
+                authToggle.classList.toggle('hidden', !selfRegistrationAllowed);
+                if (!selfRegistrationAllowed && isSignup) {
+                    authForm.dataset.view = 'login';
+                    authTitle.textContent = 'Sign In';
+                    authButton.textContent = 'Sign In';
+                }
+                authError.classList.add('hidden');
+            }
+
+            async function refreshSelfRegistrationState() {
+                const adminSnap = await db.collection(`/artifacts/${appId}/public/data/users`)
+                    .where('role', '==', 'admin')
+                    .limit(1)
+                    .get();
+                selfRegistrationAllowed = adminSnap.empty;
+                setAuthMode(authForm.dataset.view === 'signup' && selfRegistrationAllowed ? 'signup' : 'login');
+            }
+
+            async function upsertStaffRecord(name, email, uid) {
+                const normalizedEmail = email.toLowerCase();
+                const staffSnap = await db.collection(`/artifacts/${appId}/public/data/staff`)
+                    .where('email', '==', normalizedEmail)
+                    .limit(1)
+                    .get();
+                const data = { name, email: normalizedEmail, uid };
+                if (staffSnap.empty) {
+                    await db.collection(`/artifacts/${appId}/public/data/staff`).add(data);
+                } else {
+                    await db.collection(`/artifacts/${appId}/public/data/staff`).doc(staffSnap.docs[0].id).update(data);
+                }
+            }
+
+            async function createSubUser(name, email, password) {
+                const normalizedEmail = email.trim().toLowerCase();
+                const trimmedName = name.trim();
+                if (!trimmedName || !normalizedEmail || password.length < 6) {
+                    throw new Error('Name, email, and a 6+ character password are required.');
+                }
+
+                const secondaryAppName = `subuser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryAppName);
+                const secondaryAuth = secondaryApp.auth();
+
+                try {
+                    const credential = await secondaryAuth.createUserWithEmailAndPassword(normalizedEmail, password);
+                    const newUser = credential.user;
+                    await db.collection(`/artifacts/${appId}/public/data/users`).doc(newUser.uid).set({
+                        name: trimmedName,
+                        email: normalizedEmail,
+                        role: 'user',
+                        active: true,
+                        createdBy: currentUser.email,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    await upsertStaffRecord(trimmedName, normalizedEmail, newUser.uid);
+                } finally {
+                    await secondaryAuth.signOut().catch(() => {});
+                    await secondaryApp.delete().catch(() => {});
+                }
+            }
+
+            async function updateCurrentProfile(name) {
+                const trimmedName = name.trim();
+                if (!trimmedName || !currentUser) {
+                    throw new Error('Name is required.');
+                }
+                await db.collection(`/artifacts/${appId}/public/data/users`).doc(currentUser.uid).update({
+                    name: trimmedName,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                if (currentUser.email && currentUserProfile?.role !== 'admin') {
+                    await upsertStaffRecord(trimmedName, currentUser.email, currentUser.uid);
+                }
             }
             
             function showMainSection(sectionId) {
@@ -349,7 +606,6 @@
 
                 navTasksButton.classList.toggle('active', sectionId === 'tasks-page');
                 navProjectsButton.classList.toggle('active', sectionId === 'projects-page');
-                settingsButton.classList.toggle('bg-blue-200', sectionId === 'settings-page');
 
                 if (sectionId === 'settings-page') {
                     navTasksButton.classList.remove('active');
@@ -366,7 +622,6 @@
             }
             
             // --- UI Rendering ---
-
             function createBaseTaskListItemHTML(task, type, identifiers) {
                 const isDone = task.status === 'Done';
                 const dueDate = task.dueDate ? new Date(task.dueDate) : null;
@@ -377,6 +632,8 @@
                     actionButtons += `<button class="edit-task-button p-1 text-gray-400 hover:text-blue-500" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''}><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>`;
                 }
                 if (currentUserProfile.role === 'admin') {
+                    const notifyIcon = `<button class="notify-button p-1 text-gray-400 hover:text-yellow-500" data-task-id="${task.id}" data-task-description="${task.description}" data-assignee-email="${task.assigneeEmail}"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>`;
+                    actionButtons += notifyIcon;
                     actionButtons += `<button class="delete-button p-1 text-gray-400 hover:text-red-500" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''}><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
                 }
 
@@ -384,26 +641,24 @@
                 if (task.createdBy) metaHTML += `<div>Created by ${task.createdBy.split('@')[0]} at ${formatTaskTimestamp(task.createdAt)}</div>`;
                 if (isDone && task.completedBy) metaHTML += `<div>Finished by ${task.completedBy.split('@')[0]} at ${formatTaskTimestamp(task.completedAt)}</div>`;
                 
-                const repeatIcon = (task.repeat && task.repeat.type !== 'none') ? `
-                    <button class="repeat-icon-button" data-due-date="${task.dueDate}" data-repeat-type="${task.repeat.type}" data-repeat-remaining="${task.repeat.remaining || 'Infinity'}">
-                        <svg class="repeat-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.6A9 9 0 0 1 12 3a9 9 0 0 1 8.4 5.4"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.4A9 9 0 0 1 12 21a9 9 0 0 1-8.4-5.4"/></svg>
-                    </button>` : '';
+                const repeatIcon = (task.repeat && task.repeat.type !== 'none') ? `<button class="repeat-icon-button" data-due-date="${task.dueDate}" data-repeat-type="${task.repeat.type}" data-repeat-remaining="${task.repeat.remaining || 'Infinity'}"><svg class="repeat-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.6A9 9 0 0 1 12 3a9 9 0 0 1 8.4 5.4"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.4A9 9 0 0 1 12 21a9 9 0 0 1-8.4-5.4"/></svg></button>` : '';
+                const alarmIcon = task.setAlarm ? `<svg class="alarm-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/></svg>` : '';
 
                 return `
                     <div class="task-list-item">
-                        <div class="flex-grow">
-                            <div class="flex items-start">
-                                <input type="checkbox" class="task-checkbox" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''} ${isDone ? 'checked' : ''}>
-                                <div class="ml-3">
-                                    <p class="text-sm ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}">${task.description}${repeatIcon}</p>
-                                    <div class="task-meta">${metaHTML}</div>
+                        <input type="checkbox" class="task-checkbox" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''} ${isDone ? 'checked' : ''}>
+                        <div class="flex-grow ml-3 min-w-0">
+                             <p class="text-sm break-words ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}">${task.description}${repeatIcon}${alarmIcon}</p>
+                             <div class="task-meta">${metaHTML}</div>
+                             <div class="flex justify-between items-center mt-2">
+                                <div>
+                                    ${dueDate ? `<span class="text-xs font-semibold px-2 py-1 rounded-full ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}">${formatTaskTimestamp(dueDate)}</span>` : ''}
                                 </div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0 ml-4">
-                            ${dueDate ? `<span class="text-xs font-semibold px-2 py-1 rounded-full ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}">${formatTaskTimestamp(dueDate)}</span>` : ''}
-                            <button class="comment-button flex items-center gap-1 text-xs text-gray-500" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''}>Comments (${task.comments?.length || 0})</button>
-                            ${actionButtons}
+                                <div class="flex items-center gap-2">
+                                    <button class="comment-button flex items-center gap-1 text-xs text-gray-500" data-task-type="${type}" data-task-id="${task.id}" ${identifiers.projectId ? `data-project-id="${identifiers.projectId}"` : ''}>Comments (${task.comments?.length || 0})</button>
+                                    ${actionButtons}
+                                </div>
+                             </div>
                         </div>
                     </div>
                 `;
@@ -423,18 +678,16 @@
                 
                 return `
                      <div class="task-list-item">
-                        <div class="flex-grow">
-                            <div class="flex items-start">
-                                <input type="checkbox" class="task-checkbox" data-task-type="tasks_for_all" data-task-id="${task.id}" ${isCompleted ? 'checked' : ''}>
-                                <div class="ml-3">
-                                    <p class="text-sm ${isCompleted ? 'line-through text-gray-400' : 'text-gray-800'}">${task.description}</p>
-                                     <div class="task-meta">${metaHTML}</div>
+                        <input type="checkbox" class="task-checkbox" data-task-type="tasks_for_all" data-task-id="${task.id}" ${isCompleted ? 'checked' : ''}>
+                        <div class="flex-grow ml-3 min-w-0">
+                            <p class="text-sm break-words ${isCompleted ? 'line-through text-gray-400' : 'text-gray-800'}">${task.description}</p>
+                            <div class="task-meta">${metaHTML}</div>
+                            <div class="flex justify-end items-center mt-2">
+                                <div class="flex items-center gap-2">
+                                    <button class="comment-button flex items-center gap-1 text-xs text-gray-500" data-task-type="tasks_for_all" data-task-id="${task.id}">Comments (${task.comments?.length || 0})</button>
+                                    ${adminButtons}
                                 </div>
                             </div>
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0 ml-4">
-                            <button class="comment-button flex items-center gap-1 text-xs text-gray-500" data-task-type="tasks_for_all" data-task-id="${task.id}">Comments (${task.comments?.length || 0})</button>
-                            ${adminButtons}
                         </div>
                     </div>
                 `;
@@ -490,7 +743,7 @@
                 }
             });
 
-            // --- Modal Functions (Edit Task, Project & Repeat Details) ---
+            // --- Modal Functions ---
             async function openEditTaskModal(identifiers) {
                 const { taskId, taskType, projectId } = identifiers;
                 let docRef;
@@ -509,6 +762,8 @@
                 document.getElementById('edit-task-project-id').value = projectId || '';
                 document.getElementById('edit-task-description').value = task.description;
                 document.getElementById('edit-task-duedate').value = task.dueDate || '';
+                document.getElementById('edit-task-alarm').checked = task.setAlarm || false;
+                document.getElementById('edit-task-alarm-sound').value = task.alarmSound || 'alarm_classic.mp3';
                 
                 const repeatSelect = document.getElementById('edit-task-repeat');
                 const repeatCountInput = document.getElementById('edit-task-repeat-count');
@@ -521,7 +776,7 @@
                 const assigneeContainer = document.getElementById('edit-task-assignee-container');
                 if (currentUserProfile.role === 'admin' && taskType !== 'tasks_for_all') {
                     const assigneeSelect = document.getElementById('edit-task-assignee');
-                    assigneeSelect.innerHTML = projectStaffSelection.innerHTML;
+                    assigneeSelect.innerHTML = document.getElementById('individual-task-assignee').innerHTML;
                     assigneeSelect.value = task.assigneeEmail;
                     assigneeContainer.classList.remove('hidden');
                 } else {
@@ -560,8 +815,6 @@
             }
              document.getElementById('edit-project-modal-close').addEventListener('click', () => editProjectModal.classList.add('hidden'));
 
-            // --- Other UI Rendering... ---
-
             function renderToggableList(container, tasks, taskType, identifiers) {
                 const todoTasks = tasks.filter(t => t.status === 'To Do');
                 const doneTasks = tasks.filter(t => t.status === 'Done');
@@ -584,10 +837,16 @@
                     const staffTasks = tasks.filter(task => task.assigneeEmail === staff.email);
                     const staffSection = document.createElement('div');
                     staffSection.className = 'bg-white p-4 rounded-xl shadow-sm';
-                    staffSection.innerHTML = `<h3 class="text-md font-bold text-gray-700 mb-2 border-b pb-2">${staff.name}</h3>`;
+                    
+                    const staffId = staff.email.replace(/[@.]/g, '-');
+
+                    staffSection.innerHTML = `<h3 class="staff-header text-md font-bold text-gray-700 mb-2 border-b pb-2 hover:text-blue-600" data-staff-id="${staffId}">${staff.name}</h3>`;
                     
                     const taskListContainer = document.createElement('div');
+                    taskListContainer.id = `staff-tasks-${staffId}`;
+                    taskListContainer.classList.add('hidden');
                     renderToggableList(taskListContainer, staffTasks, 'tasks', {});
+                    
                     staffSection.appendChild(taskListContainer);
                     individualTasksContainer.appendChild(staffSection);
                 });
@@ -600,8 +859,8 @@
                 userSection.innerHTML = `
                     <form id="user-add-individual-task-form" class="space-y-4 pb-4 mb-4 border-b">
                         <input type="text" id="user-individual-task-desc" placeholder="Add a new task for myself..." class="flex-grow p-2 border rounded-lg w-full" required />
-                        <div class="flex gap-2 items-center flex-wrap">
-                            <input type="datetime-local" id="user-individual-task-due" class="p-2 border rounded-lg flex-grow" />
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="datetime-local" id="user-individual-task-due" class="p-2 border rounded-lg w-full" />
                             <div class="flex items-end gap-2">
                                 <div class="flex-grow">
                                     <label class="text-sm font-medium text-gray-700">Repeat</label>
@@ -616,6 +875,20 @@
                                 <div class="new-task-repeat-count-container hidden">
                                     <input type="number" class="new-task-repeat-count p-2 border rounded-lg w-24" placeholder="Times" min="1">
                                 </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="user-individual-task-alarm" class="new-task-alarm h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="user-individual-task-alarm" class="text-sm font-medium text-gray-700">Set Alarm</label>
+                            </div>
+                            <div class="flex-grow">
+                                <label class="text-sm font-medium text-gray-700">Alarm Sound</label>
+                                <select class="new-task-alarm-sound mt-1 p-2 border rounded-lg bg-white w-full">
+                                    <option value="alarm_classic.mp3">Classic Alarm</option>
+                                    <option value="hurry_up.mp3">Hurry Up</option>
+                                    <option value="gentle_chime.mp3">Gentle Chime</option>
+                                </select>
                             </div>
                         </div>
                         <button type="submit" class="w-full bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600">Add Task</button>
@@ -643,26 +916,22 @@
                 projectsWithCounts.sort((a, b) => b.pendingTaskCount - a.pendingTaskCount);
 
                 projectsWithCounts.forEach(project => {
-                    const isCompleted = project.pendingTaskCount === 0;
                     const projectEl = document.createElement('div');
                     projectEl.className = 'bg-white p-6 rounded-xl shadow-sm';
                     
                     let adminButtons = '';
                     if (currentUserProfile.role === 'admin') {
-                        adminButtons = `
-                            <div class="flex items-center gap-2">
-                                <button class="edit-project-button text-blue-500 text-xs" data-id="${project.id}" data-name="${project.name}">Edit</button>
-                                <button class="delete-project-button text-red-500 text-xs" data-id="${project.id}">Delete Project</button>
-                            </div>`;
+                        adminButtons = `<div class="flex items-center gap-2"><button class="edit-project-button text-blue-500 text-xs" data-id="${project.id}" data-name="${project.name}">Edit</button><button class="delete-project-button text-red-500 text-xs" data-id="${project.id}">Delete Project</button></div>`;
                     }
                     
                     projectEl.innerHTML = `
                         <div class="flex justify-between items-start">
-                             <h3 class="project-title text-xl font-bold text-blue-600 mb-4 ${isCompleted ? 'clickable' : ''}" data-project-id="${project.id}">${project.name}</h3>
+                             <h3 class="project-title clickable text-xl font-bold text-blue-600 mb-4" data-project-id="${project.id}">${project.name}</h3>
                              ${adminButtons}
                         </div>
-                        <div id="project-content-${project.id}" class="${isCompleted ? 'hidden' : ''}">Loading tasks...</div>
+                        <div id="project-content-${project.id}" class="hidden">Loading tasks...</div>
                     `;
+                    
                     projectsContainer.appendChild(projectEl);
                     renderProjectContent(project, staffList);
                 });
@@ -681,7 +950,6 @@
 
                 const unsub = query.onSnapshot(tasksSnapshot => {
                     const tasks = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    
                     const membersData = staffList.filter(s => project.members.includes(s.email));
 
                     if (currentUserProfile.role === 'admin') {
@@ -690,11 +958,7 @@
                             const taskListContainer = document.createElement('div');
                             renderToggableList(taskListContainer, staffTasks, 'project', {projectId: project.id});
 
-                            return `
-                                <div class="mt-4">
-                                    <h4 class="text-sm font-semibold text-gray-700">${staff.name}</h4>
-                                    ${taskListContainer.innerHTML}
-                                </div>`;
+                            return `<div class="mt-4"><h4 class="text-sm font-semibold text-gray-700">${staff.name}</h4>${taskListContainer.innerHTML}</div>`;
                          }).join('');
 
                          contentEl.innerHTML = `
@@ -718,6 +982,20 @@
                                         <div class="new-task-repeat-count-container hidden">
                                             <input type="number" class="new-task-repeat-count p-2 border rounded-lg w-24" placeholder="Times" min="1">
                                         </div>
+                                    </div>
+                                </div>
+                                 <div class="flex items-center gap-4 mt-2">
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="admin-project-task-alarm" class="new-task-alarm h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <label for="admin-project-task-alarm" class="text-sm font-medium text-gray-700">Set Alarm</label>
+                                    </div>
+                                    <div class="flex-grow">
+                                        <label class="text-sm font-medium text-gray-700">Alarm Sound</label>
+                                        <select class="new-task-alarm-sound mt-1 p-2 border rounded-lg bg-white w-full">
+                                            <option value="alarm_classic.mp3">Classic Alarm</option>
+                                            <option value="hurry_up.mp3">Hurry Up</option>
+                                            <option value="gentle_chime.mp3">Gentle Chime</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <button type="submit" class="w-full bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600">Assign Task</button>
@@ -744,6 +1022,20 @@
                                         <div class="new-task-repeat-count-container hidden">
                                            <input type="number" class="new-task-repeat-count p-2 border rounded-lg w-24" placeholder="Times" min="1">
                                         </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-4 mt-2">
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="user-project-task-alarm" class="new-task-alarm h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <label for="user-project-task-alarm" class="text-sm font-medium text-gray-700">Set Alarm</label>
+                                    </div>
+                                    <div class="flex-grow">
+                                        <label class="text-sm font-medium text-gray-700">Alarm Sound</label>
+                                        <select class="new-task-alarm-sound mt-1 p-2 border rounded-lg bg-white w-full">
+                                            <option value="alarm_classic.mp3">Classic Alarm</option>
+                                            <option value="hurry_up.mp3">Hurry Up</option>
+                                            <option value="gentle_chime.mp3">Gentle Chime</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <button type="submit" class="w-full bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600">Add Task</button>
@@ -778,10 +1070,6 @@
                 staffListContainer.innerHTML = staff.length > 0 ? staff.map(s => `
                     <div class="flex justify-between items-center text-sm py-1">
                         <div><p class="font-semibold text-gray-700">${s.name}</p><p class="text-gray-500 text-xs">${s.email}</p></div>
-                        <div class="flex gap-2">
-                            <button class="edit-staff-button text-blue-500 text-xs" data-id="${s.id}" data-name="${s.name}" data-email="${s.email}">Edit</button>
-                            <button class="remove-staff-button text-red-500 text-xs" data-id="${s.id}">Remove</button>
-                        </div>
                     </div>`).join('') : `<p class="text-gray-500 text-xs text-center">No staff added.</p>`;
 
                 projectStaffSelection.innerHTML = staff.length > 0 ? staff.map(s => `
@@ -794,17 +1082,17 @@
             // --- Modal Functions (Comment & Edit Staff) ---
             function openCommentModal(task, identifiers) {
                 currentCommentingTask = identifiers;
-                commentModalTaskDescription.textContent = task.description;
-                document.getElementById('comment-modal-list').innerHTML = '';
-
+                document.getElementById('comment-modal-task-description').textContent = task.description;
+                const listEl = document.getElementById('comment-modal-list');
+                
                  if (task.comments && task.comments.length > 0) {
                     const sortedComments = [...task.comments].sort((a, b) => (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0) - (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0));
-                    document.getElementById('comment-modal-list').innerHTML = sortedComments.map(comment => `
+                    listEl.innerHTML = sortedComments.map(comment => `
                         <div class="flex gap-3 mb-4">
                             <div><p class="font-semibold text-gray-700 text-sm">${comment.authorEmail}</p><p class="bg-gray-100 p-3 rounded-lg text-gray-800 text-sm mt-1">${comment.text}</p><p class="text-gray-400 text-xs text-right mt-1">${formatTaskTimestamp(comment.createdAt)}</p></div>
                         </div>`).join('');
                 } else {
-                     document.getElementById('comment-modal-list').innerHTML = '<p class="text-gray-500 text-center mt-8">No comments yet.</p>';
+                     listEl.innerHTML = '<p class="text-gray-500 text-center mt-8">No comments yet.</p>';
                 }
                 commentModal.classList.remove('hidden');
             }
@@ -824,8 +1112,18 @@
                 currentUnsubscribes = [];
 
                 if (!currentUserProfile || !currentUser.email) return;
+                
+                // Notifications Listener
+                const notificationsRef = db.collection(`/artifacts/${appId}/public/data/users/${currentUser.uid}/notifications`).orderBy("createdAt", "desc");
+                let unsub = notificationsRef.onSnapshot(snapshot => {
+                    const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const unread = notifications.filter(n => !n.read);
+                    document.getElementById('notification-dot').classList.toggle('hidden', unread.length === 0);
+                    renderNotifications(notifications);
+                });
+                currentUnsubscribes.push(unsub);
 
-                let unsub = db.collection(`/artifacts/${appId}/public/data/tasks_for_all`).orderBy("createdAt", "desc").onSnapshot(
+                unsub = db.collection(`/artifacts/${appId}/public/data/tasks_for_all`).orderBy("createdAt", "desc").onSnapshot(
                     snapshot => renderTasksForAll(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))),
                     error => showAppError('Error fetching general tasks.', error)
                 );
@@ -840,6 +1138,7 @@
                     
                     unsub = db.collection(`/artifacts/${appId}/public/data/tasks`).orderBy("createdAt", "desc").onSnapshot(async tasksSnap => {
                         const tasks = tasksSnap.docs.map(d => ({id: d.id, ...d.data()}));
+                        startAlarmChecker(tasks);
                         const staffSnap = await db.collection(`/artifacts/${appId}/public/data/staff`).orderBy("name").get();
                         const staffList = staffSnap.docs.map(d => ({id: d.id, ...d.data()}));
                         renderAdminIndividualTasks(tasks, staffList);
@@ -851,7 +1150,7 @@
                             const projects = projectsSnap.docs.map(d => ({id: d.id, ...d.data()}));
                             const staffSnap = await db.collection(`/artifacts/${appId}/public/data/staff`).orderBy("name").get();
                             const staffList = staffSnap.docs.map(d => ({id: d.id, ...d.data()}));
-                            renderProjects(projects, staffList); // Now handles sorting
+                            renderProjects(projects, staffList);
                         },
                         error => showAppError('Error fetching projects.', error)
                     );
@@ -859,7 +1158,11 @@
 
                 } else { // User View
                     unsub = db.collection(`/artifacts/${appId}/public/data/tasks`).where("assigneeEmail", "==", currentUser.email).orderBy("createdAt", "desc").onSnapshot(
-                        tasksSnap => renderUserIndividualTasks(tasksSnap.docs.map(d => ({id: d.id, ...d.data()}))),
+                        tasksSnap => {
+                             const tasks = tasksSnap.docs.map(d => ({id: d.id, ...d.data()}));
+                             startAlarmChecker(tasks);
+                             renderUserIndividualTasks(tasks)
+                        },
                         error => showAppError('Error fetching your individual tasks.', error)
                     );
                     currentUnsubscribes.push(unsub);
@@ -869,7 +1172,7 @@
                             const projects = projectsSnap.docs.map(d => ({id: d.id, ...d.data()}));
                             const staffSnap = await db.collection(`/artifacts/${appId}/public/data/staff`).get();
                             const staffList = staffSnap.docs.map(d => ({id: d.id, ...d.data()}));
-                            renderProjects(projects, staffList); // Now handles sorting
+                            renderProjects(projects, staffList);
                         },
                         error => showAppError('Error fetching your projects.', error)
                     );
@@ -879,42 +1182,91 @@
 
 
             // --- Auth State Change Handler ---
-            auth.onAuthStateChanged(async user => {
+             auth.onAuthStateChanged(async user => {
                 currentUser = user;
                 loadingIndicator.classList.add('hidden');
                 
                 if (user) {
-                    authScreen.classList.add('hidden');
-                    appScreen.classList.remove('hidden');
-
                     const userDocRef = db.collection(`/artifacts/${appId}/public/data/users`).doc(user.uid);
-                    const unsub = userDocRef.onSnapshot(async (doc) => {
+                    
+                    const userDocSnap = await userDocRef.get().catch(error => {
+                        showAppError('Could not verify user profile.', error);
+                        auth.signOut();
+                        return null;
+                    });
+
+                    if (userDocSnap && !userDocSnap.exists) {
+                        const adminSnap = await db.collection(`/artifacts/${appId}/public/data/users`)
+                            .where('role', '==', 'admin')
+                            .limit(1)
+                            .get()
+                            .catch(error => {
+                                showAppError('Could not verify admin status.', error);
+                                auth.signOut();
+                                return null;
+                            });
+
+                        if (!adminSnap) {
+                            return;
+                        }
+
+                        if (adminSnap.empty) {
+                            await userDocRef.set({
+                                name: (user.email || 'admin').split('@')[0],
+                                email: (user.email || '').toLowerCase(),
+                                role: 'admin',
+                                active: true,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            }).catch(error => {
+                                showAppError('Error creating admin profile.', error);
+                                auth.signOut();
+                                return;
+                            });
+                            selfRegistrationAllowed = false;
+                        } else {
+                            authError.textContent = 'This account is not provisioned. Ask the admin to add you as a sub user.';
+                            authError.classList.remove('hidden');
+                            await auth.signOut();
+                            return;
+                        }
+                    }
+
+                    appScreen.classList.remove('hidden');
+                    authScreen.classList.add('hidden');
+
+                    const unsub = userDocRef.onSnapshot((doc) => {
                         if (doc.exists) {
                             currentUserProfile = doc.data();
-                        } else {
-                            try {
-                                const usersCol = await db.collection(`/artifacts/${appId}/public/data/users`).get();
-                                currentUserProfile = { email: user.email, role: usersCol.empty ? 'admin' : 'user' };
-                                await userDocRef.set(currentUserProfile);
-                            } catch (error) { showAppError("Error creating user profile.", error) }
-                        }
-                        
-                        if (currentUserProfile) {
-                            const isAdmin = currentUserProfile.role === 'admin';
-                            appError.classList.add('hidden');
-                            document.getElementById('user-info-badge').innerHTML = `<span>${user.email} (${currentUserProfile.role})</span>`;
-                            document.getElementById('user-info-badge').className = `mt-1 text-xs text-white inline-flex items-center gap-2 px-2 py-1 rounded ${isAdmin ? 'bg-green-600' : 'bg-blue-600'}`;
-                            
-                            settingsButton.classList.toggle('hidden', !isAdmin);
-                            document.getElementById('task-for-all-form').style.display = isAdmin ? 'flex' : 'none';
-                            document.getElementById('admin-create-project-container').classList.toggle('hidden', !isAdmin);
-                            document.getElementById('admin-assign-task-container').classList.toggle('hidden', !isAdmin);
+                            if (currentUserProfile) {
+                                if (currentUserProfile.active === false) {
+                                    authError.textContent = 'This account has been disabled by the admin.';
+                                    authError.classList.remove('hidden');
+                                    auth.signOut();
+                                    return;
+                                }
+                                const isAdmin = currentUserProfile.role === 'admin';
+                                appError.classList.add('hidden');
+                                document.getElementById('user-info-badge').innerHTML = `<span>${currentUserProfile.name || user.email} (${currentUserProfile.role})</span>`;
+                                document.getElementById('user-info-badge').className = `mt-1 text-xs text-white inline-flex items-center gap-2 px-2 py-1 rounded ${isAdmin ? 'bg-green-600' : 'bg-blue-600'}`;
+                                
+                                menuAddSubusers.classList.toggle('hidden', !isAdmin);
+                                document.getElementById('task-for-all-form').style.display = isAdmin ? 'flex' : 'none';
+                                document.getElementById('admin-create-project-container').classList.toggle('hidden', !isAdmin);
+                                document.getElementById('admin-assign-task-container').classList.toggle('hidden', !isAdmin);
+                                
+                                projectsSectionTitle.textContent = isAdmin ? 'All Projects' : 'My Assigned Projects';
+                                individualTasksTitle.textContent = isAdmin ? 'Individual Tasks Overview (All Staff)' : 'My Individual Tasks';
+                                
+                                if (Notification.permission === 'default') {
+                                    Notification.requestPermission();
+                                }
 
-                            projectsSectionTitle.textContent = isAdmin ? 'All Projects' : 'My Assigned Projects';
-                            individualTasksTitle.textContent = isAdmin ? 'Individual Tasks Overview (All Staff)' : 'My Individual Tasks';
-                            
-                            showMainSection('tasks-page');
-                            setupFirestoreListeners();
+                                showMainSection('tasks-page');
+                                setupFirestoreListeners();
+                            }
+                        } else {
+                            showAppError('User profile not found. Please sign out and sign in again.');
+                            auth.signOut();
                         }
                     }, error => showAppError('Error fetching user profile.', error));
                     currentUnsubscribes.push(unsub);
@@ -923,6 +1275,8 @@
                     appScreen.classList.add('hidden');
                     authScreen.classList.remove('hidden');
                     currentUnsubscribes.forEach(unsub => unsub());
+                    if(alarmCheckInterval) clearInterval(alarmCheckInterval);
+                    refreshSelfRegistrationState().catch(error => showAppError('Could not load auth mode.', error));
                 }
             });
 
@@ -933,41 +1287,73 @@
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
                 const isLogin = authForm.dataset.view === 'login';
+                if (!isLogin && !selfRegistrationAllowed) {
+                    authError.textContent = 'Self sign-up is disabled. Ask the admin to add you as a sub user.';
+                    authError.classList.remove('hidden');
+                    return;
+                }
                 const promise = isLogin ? auth.signInWithEmailAndPassword(email, password) : auth.createUserWithEmailAndPassword(email, password);
                 promise.catch(err => { authError.textContent = err.message; authError.classList.remove('hidden'); });
             });
 
             authToggle.addEventListener('click', () => {
-                const isCurrentlyLogin = authForm.dataset.view === 'login';
-
-                if (isCurrentlyLogin) {
-                    authForm.dataset.view = 'signup';
-                    document.getElementById('auth-title').textContent = 'Create Account';
-                    document.getElementById('auth-button').textContent = 'Create Account';
-                    authToggle.textContent = 'Already have an account? Sign In';
-                } else {
-                    authForm.dataset.view = 'login';
-                    document.getElementById('auth-title').textContent = 'Sign In';
-                    document.getElementById('auth-button').textContent = 'Sign In';
-                    authToggle.textContent = 'Need an account? Sign Up';
+                if (!selfRegistrationAllowed) {
+                    setAuthMode('login');
+                    return;
                 }
-                authError.classList.add('hidden');
+                const isCurrentlyLogin = authForm.dataset.view === 'login';
+                setAuthMode(isCurrentlyLogin ? 'signup' : 'login');
             });
-            authForm.dataset.view = 'login';
+            setAuthMode('login');
 
-            logoutButton.addEventListener('click', () => auth.signOut());
-            settingsButton.addEventListener('click', () => showMainSection('settings-page'));
+            accountMenuButton.addEventListener('click', () => accountMenu.classList.toggle('hidden'));
+            menuLogout.addEventListener('click', () => auth.signOut());
+            menuAddSubusers.addEventListener('click', () => {
+                accountMenu.classList.add('hidden');
+                showMainSection('settings-page');
+            });
+            menuEditProfile.addEventListener('click', () => {
+                accountMenu.classList.add('hidden');
+                document.getElementById('profile-name').value = currentUserProfile?.name || (currentUser?.email || '').split('@')[0];
+                document.getElementById('profile-email').value = currentUser?.email || '';
+                setInlineMessage(profileFormMessage, '');
+                profileModal.classList.remove('hidden');
+            });
             navTasksButton.addEventListener('click', () => showMainSection('tasks-page'));
             navProjectsButton.addEventListener('click', () => showMainSection('projects-page'));
+            document.getElementById('profile-modal-close').addEventListener('click', () => profileModal.classList.add('hidden'));
+            document.addEventListener('click', event => {
+                if (!accountMenu.contains(event.target) && !accountMenuButton.contains(event.target)) {
+                    accountMenu.classList.add('hidden');
+                }
+            });
+
+            // Collapsible Form Headers
+            let assignTaskTimeout, createProjectTimeout;
+            assignTaskHeader.addEventListener('click', () => assignTaskFormContainer.classList.toggle('hidden'));
+            createProjectHeader.addEventListener('click', () => createProjectFormContainer.classList.toggle('hidden'));
 
             document.getElementById('add-staff-form').addEventListener('submit', e => {
                 e.preventDefault();
                 const name = document.getElementById('new-staff-name').value.trim();
                 const email = document.getElementById('new-staff-email').value.trim();
-                if (name && email) {
-                    db.collection(`/artifacts/${appId}/public/data/staff`).add({ name, email: email.toLowerCase() });
-                    e.target.reset();
-                }
+                const password = document.getElementById('new-staff-password').value;
+                createSubUser(name, email, password)
+                    .then(() => {
+                        e.target.reset();
+                        setInlineMessage(subuserFormMessage, 'Sub user created successfully.');
+                    })
+                    .catch(error => setInlineMessage(subuserFormMessage, error.message, true));
+            });
+
+            profileForm.addEventListener('submit', e => {
+                e.preventDefault();
+                updateCurrentProfile(document.getElementById('profile-name').value)
+                    .then(() => {
+                        setInlineMessage(profileFormMessage, 'Profile updated successfully.');
+                        setTimeout(() => profileModal.classList.add('hidden'), 600);
+                    })
+                    .catch(error => setInlineMessage(profileFormMessage, error.message, true));
             });
             
             document.getElementById('create-project-form').addEventListener('submit', e => {
@@ -980,6 +1366,8 @@
                     db.collection(`/artifacts/${appId}/public/data/projects`).add({ name, members, createdAt: new Date() });
                     e.target.reset();
                     alert('Project created successfully!');
+                    clearTimeout(createProjectTimeout);
+                    createProjectTimeout = setTimeout(() => createProjectFormContainer.classList.add('hidden'), 3000);
                 } else {
                     alert('Please provide a project name and select at least one member.');
                 }
@@ -988,15 +1376,17 @@
             document.getElementById('assign-individual-task-form').addEventListener('submit', async e => {
                  e.preventDefault();
                  const form = e.target;
-                 const description = document.getElementById('individual-task-description').value.trim();
-                 const assigneeEmail = document.getElementById('individual-task-assignee').value;
-                 const dueDate = document.getElementById('individual-task-duedate').value;
+                 const description = form.querySelector('#individual-task-description').value.trim();
+                 const assigneeEmail = form.querySelector('#individual-task-assignee').value;
+                 const dueDate = form.querySelector('#individual-task-duedate').value;
                  const repeatType = form.querySelector('.new-task-repeat').value;
                  const repeatCount = form.querySelector('.new-task-repeat-count').value;
+                 const setAlarm = form.querySelector('#individual-task-alarm').checked;
+                 const alarmSound = form.querySelector('.new-task-alarm-sound').value;
 
                  if (!description || !assigneeEmail) return;
 
-                 const taskData = { description, assigneeEmail, dueDate, status: 'To Do', comments: [], createdAt: new Date(), createdBy: currentUser.email };
+                 const taskData = { description, assigneeEmail, dueDate, status: 'To Do', comments: [], createdAt: new Date(), createdBy: currentUser.email, setAlarm, alarmSound };
                  if (repeatType !== 'none') {
                      taskData.repeat = { type: repeatType };
                      if (repeatCount) taskData.repeat.remaining = parseInt(repeatCount);
@@ -1005,6 +1395,8 @@
                  db.collection(`/artifacts/${appId}/public/data/tasks`).add(taskData);
                  form.reset();
                  alert('Task assigned successfully!');
+                 clearTimeout(assignTaskTimeout);
+                 assignTaskTimeout = setTimeout(() => assignTaskFormContainer.classList.add('hidden'), 3000);
             });
 
             document.getElementById('task-for-all-form').addEventListener('submit', e => {
@@ -1054,10 +1446,12 @@
                 if (e.target.matches('.admin-add-task-form, .user-add-task-form, #user-add-individual-task-form')) {
                     e.preventDefault();
                     const form = e.target;
-                    const description = form.querySelector('input[type="text"]').value.trim();
-                    const dueDate = form.querySelector('input[type="datetime-local"]')?.value || null;
+                    const description = form.querySelector('.new-task-description')?.value.trim();
+                    const dueDate = form.querySelector('.new-task-duedate')?.value || null;
                     const repeatType = form.querySelector('.new-task-repeat')?.value || 'none';
                     const repeatCount = form.querySelector('.new-task-repeat-count')?.value;
+                    const setAlarm = form.querySelector('.new-task-alarm')?.checked || false;
+                    const alarmSound = form.querySelector('.new-task-alarm-sound')?.value;
 
                     let assigneeEmail, collectionRef;
 
@@ -1067,13 +1461,13 @@
                     } else if (form.matches('.user-add-task-form')) {
                         assigneeEmail = currentUser.email;
                         collectionRef = db.collection(`/artifacts/${appId}/public/data/projects/${form.dataset.projectId}/tasks`);
-                    } else { // user-add-individual-task-form
+                    } else if (form.id === 'user-add-individual-task-form') {
                         assigneeEmail = currentUser.email;
                         collectionRef = db.collection(`/artifacts/${appId}/public/data/tasks`);
-                    }
+                    } else { return; }
                     
                     if (description && assigneeEmail && collectionRef) {
-                        const taskData = { description, assigneeEmail, dueDate, status: 'To Do', comments: [], createdAt: new Date(), createdBy: currentUser.email };
+                        const taskData = { description, assigneeEmail, dueDate, status: 'To Do', comments: [], createdAt: new Date(), createdBy: currentUser.email, setAlarm, alarmSound };
                         if (repeatType !== 'none') {
                            taskData.repeat = { type: repeatType };
                            if (repeatCount) taskData.repeat.remaining = parseInt(repeatCount);
@@ -1093,13 +1487,14 @@
                 const taskId = document.getElementById('edit-task-id').value;
                 const taskType = document.getElementById('edit-task-type').value;
                 const projectId = document.getElementById('edit-task-project-id').value;
-                
                 const repeatType = document.getElementById('edit-task-repeat').value;
                 const repeatCount = document.getElementById('edit-task-repeat-count').value;
 
                 const updateData = {
                     description: document.getElementById('edit-task-description').value,
                     dueDate: document.getElementById('edit-task-duedate').value || null,
+                    setAlarm: document.getElementById('edit-task-alarm').checked,
+                    alarmSound: document.getElementById('edit-task-alarm-sound').value,
                     lastUpdatedBy: currentUser.email,
                     lastUpdatedAt: new Date()
                 };
@@ -1119,7 +1514,7 @@
                 if (taskType === 'project') docRef = db.collection(`/artifacts/${appId}/public/data/projects/${projectId}/tasks`).doc(taskId);
                 else docRef = db.collection(`/artifacts/${appId}/public/data/${taskType}`).doc(taskId);
 
-                docRef.update(updateData).then(closeEditTaskModal);
+                docRef.update(updateData).then(() => editTaskModal.classList.add('hidden'));
             });
 
 
@@ -1128,7 +1523,36 @@
                 const button = e.target.closest('button');
                 if (!button) return;
 
-                const { taskId, taskType, projectId, id, dueDate, repeatType, repeatRemaining, name } = button.dataset;
+                if (button.classList.contains('comment-button')) {
+                    const commentTaskId = button.dataset.taskId;
+                    const commentTaskType = button.dataset.taskType;
+                    const commentProjectId = button.dataset.projectId;
+
+                    if (!commentTaskId || !commentTaskType) return;
+
+                    let docRef;
+                    if (commentTaskType === 'project') {
+                        if (!commentProjectId) return;
+                        docRef = db.collection(`/artifacts/${appId}/public/data/projects/${commentProjectId}/tasks`).doc(commentTaskId);
+                    } else {
+                        docRef = db.collection(`/artifacts/${appId}/public/data/${commentTaskType}`).doc(commentTaskId);
+                    }
+
+                    const docSnap = await docRef.get();
+                    if (docSnap.exists) {
+                        openCommentModal(docSnap.data(), { 
+                            type: commentTaskType, 
+                            projectId: commentProjectId, 
+                            taskId: commentTaskId 
+                        });
+                    } else {
+                        showAppError('Error: The task for these comments could not be found.');
+                    }
+                    return;
+                }
+                
+                // Other button handlers
+                const { taskId, taskType, projectId, id, name } = button.dataset;
 
                 if (button.classList.contains('delete-button')) {
                     const confirmed = await promptForAdminPassword('Delete Task');
@@ -1147,12 +1571,6 @@
                     }
                 } else if (button.classList.contains('edit-project-button')) {
                     openEditProjectModal(id, name);
-                } else if (button.classList.contains('comment-button')) {
-                    let docRef;
-                    if (taskType === 'project') docRef = db.collection(`/artifacts/${appId}/public/data/projects/${projectId}/tasks`).doc(taskId);
-                    else docRef = db.collection(`/artifacts/${appId}/public/data/${taskType}`).doc(taskId);
-                    const docSnap = await docRef.get();
-                    if (docSnap.exists) openCommentModal(docSnap.data(), { type: taskType, projectId, taskId });
                 } else if (button.classList.contains('toggle-completed-btn')) {
                     const list = button.nextElementSibling;
                     if (list && list.classList.contains('done-list')) {
@@ -1170,12 +1588,36 @@
                 } else if (button.id === 'tasks-for-all-toggle-completed') {
                     const list = document.getElementById('tasks-for-all-done-list');
                     list.classList.toggle('hidden');
-                    const isHidden = list.classList.contains('hidden');
-                    button.textContent = button.textContent.replace(isHidden ? 'Hide' : 'Show', isHidden ? 'Show' : 'Hide');
+                    button.textContent = button.textContent.replace(list.classList.contains('hidden') ? 'Hide' : 'Show', list.classList.contains('hidden') ? 'Show' : 'Hide');
                 } else if (button.classList.contains('repeat-icon-button')) {
-                    openRepeatDetailsModal(dueDate, repeatType, repeatRemaining);
+                    openRepeatDetailsModal(button.dataset.dueDate, button.dataset.repeatType, button.dataset.repeatRemaining);
+                } else if (button.id === 'notification-bell-button') {
+                    notificationModal.classList.remove('hidden');
+                } else if (button.id === 'notification-modal-close') {
+                    notificationModal.classList.add('hidden');
+                } else if (button.classList.contains('notify-button')) {
+                    // Send notification logic
+                    const { taskDescription, assigneeEmail } = button.dataset;
+                    const staffRef = db.collection(`/artifacts/${appId}/public/data/staff`).where('email', '==', assigneeEmail);
+                    const staffSnap = await staffRef.get();
+                    if (!staffSnap.empty) {
+                        const staffDoc = staffSnap.docs[0];
+                        const userRef = db.collection(`/artifacts/${appId}/public/data/users`).where('email', '==', staffDoc.data().email);
+                        const userSnap = await userRef.get();
+                        if (!userSnap.empty) {
+                            const userDoc = userSnap.docs[0];
+                            const notificationsCol = db.collection(`/artifacts/${appId}/public/data/users/${userDoc.id}/notifications`);
+                            await notificationsCol.add({
+                                text: `Admin wants your attention on task: "${taskDescription}"`,
+                                read: false,
+                                createdAt: new Date()
+                            });
+                            alert('Notification sent!');
+                        }
+                    }
                 }
             });
+            
             // Handle project title clicks for expanding/collapsing
             projectsContainer.addEventListener('click', e => {
                 const title = e.target.closest('.project-title.clickable');
@@ -1186,11 +1628,21 @@
                 }
             });
 
+            // Handle staff header clicks for expanding/collapsing individual tasks
+            individualTasksContainer.addEventListener('click', e => {
+                const header = e.target.closest('.staff-header');
+                if (header) {
+                    const staffId = header.dataset.staffId;
+                    const contentEl = document.getElementById(`staff-tasks-${staffId}`);
+                    if (contentEl) contentEl.classList.toggle('hidden');
+                }
+            });
+
             // --- Repeat Count Input Visibility ---
             document.body.addEventListener('change', e => {
                  if (e.target.matches('.new-task-repeat, #edit-task-repeat')) {
                     const select = e.target;
-                    const container = select.closest('div');
+                    const container = select.closest('div, .flex-grow');
                     const countContainer = container.nextElementSibling;
                     if (countContainer && countContainer.matches('.new-task-repeat-count-container, .edit-task-repeat-count-container')) {
                         countContainer.classList.toggle('hidden', select.value === 'none');
@@ -1219,7 +1671,7 @@
                 if (isChecked) {
                     const confirmed = await confirmAction('Finish Task');
                     if (!confirmed) {
-                        checkbox.checked = false; // Revert checkbox if cancelled
+                        checkbox.checked = false;
                         return;
                     }
                 }
@@ -1239,9 +1691,8 @@
                     if (docSnap.exists) {
                         const completedTask = docSnap.data();
                         if (completedTask.repeat && completedTask.repeat.type !== 'none') {
-                             // Check if there's a limit and if it's reached
                             if (completedTask.repeat.remaining && completedTask.repeat.remaining <= 1) {
-                                // This was the last repetition, do not create a new one
+                                // Last repetition
                             } else {
                                 const nextDueDate = calculateNextDueDate(completedTask.dueDate, completedTask.repeat.type);
                                 const newTaskData = { ...completedTask, status: 'To Do', createdAt: new Date(), dueDate: nextDueDate, completedBy: null, completedAt: null, lastUpdatedBy: null, lastUpdatedAt: null };
@@ -1270,6 +1721,33 @@
                     handleTaskStatusChange(e);
                 }
             });
+
+             function renderNotifications(notifications) {
+                const listEl = document.getElementById('notification-list');
+                if (notifications.length === 0) {
+                    listEl.innerHTML = '<p class="text-gray-500 text-center">No new notifications.</p>';
+                    return;
+                }
+                listEl.innerHTML = notifications.map(n => `
+                    <div class="p-2 border-b flex justify-between items-start ${!n.read ? 'bg-blue-50' : ''}">
+                        <div>
+                            <p class="text-sm">${n.text}</p>
+                            <p class="text-xs text-gray-500 mt-1">${formatTaskTimestamp(n.createdAt)}</p>
+                        </div>
+                        <button class="delete-notification-button text-red-400 hover:text-red-600 p-1" data-id="${n.id}">&times;</button>
+                    </div>
+                `).join('');
+            }
+
+            notificationModal.addEventListener('click', async e => {
+                const button = e.target.closest('.delete-notification-button');
+                if (button) {
+                    const notificationId = button.dataset.id;
+                    await db.collection(`/artifacts/${appId}/public/data/users/${currentUser.uid}/notifications`).doc(notificationId).delete();
+                }
+            });
+
+
         });
     </script>
 </body>

@@ -80,12 +80,16 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                             Install
                         </button>
-                        <button id="settings-button" class="p-2 rounded-full hover:bg-gray-200 hidden">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                        </button>
-                        <button id="logout-button" class="p-2 rounded-full hover:bg-red-100 text-red-500">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        </button>
+                        <div class="relative">
+                            <button id="account-menu-button" class="p-2 rounded-full hover:bg-gray-200 text-gray-700" aria-label="Account menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                            </button>
+                            <div id="account-menu" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-30">
+                                <button id="menu-edit-profile" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100">Edit Profile</button>
+                                <button id="menu-add-subusers" class="hidden w-full text-left px-4 py-2 text-sm hover:bg-gray-100">Add Sub Users</button>
+                                <button id="menu-logout" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">Logout</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="bg-gray-200 p-1 rounded-lg flex gap-1">
@@ -190,13 +194,15 @@
                 <!-- Settings Section (Admin Only) -->
                 <section id="settings-page" class="main-section hidden space-y-8">
                     <div id="staff-management-section" class="bg-white p-6 rounded-xl shadow-sm">
-                        <h2 class="text-xl font-semibold mb-4">User Management</h2>
+                        <h2 class="text-xl font-semibold mb-4">Sub User Management</h2>
                         <div id="staff-list-container" class="max-h-64 overflow-y-auto pr-2"></div>
-                        <form id="add-staff-form" class="flex gap-2 mt-4">
-                            <input type="text" id="new-staff-name" placeholder="Name" class="p-2 border rounded-lg w-1/2" />
-                            <input type="email" id="new-staff-email" placeholder="Email" class="p-2 border rounded-lg w-1/2" />
-                            <button id="add-staff-button" type="submit" class="bg-green-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-green-600">+</button>
+                        <form id="add-staff-form" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+                            <input type="text" id="new-staff-name" placeholder="Name" class="p-2 border rounded-lg" />
+                            <input type="email" id="new-staff-email" placeholder="Email" class="p-2 border rounded-lg" />
+                            <input type="password" id="new-staff-password" placeholder="Password" minLength="6" class="p-2 border rounded-lg" />
+                            <button id="add-staff-button" type="submit" class="sm:col-span-3 bg-green-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-green-600">Save Sub User</button>
                         </form>
+                        <p id="subuser-form-message" class="hidden text-sm mt-3"></p>
                     </div>
                 </section>
             </main>
@@ -219,6 +225,17 @@
             <p id="comment-modal-task-description" class="px-6 text-gray-600 text-sm mt-1 max-w-md"></p>
             <div id="comment-modal-list" class="p-6 h-80 overflow-y-auto"></div>
             <form id="comment-modal-form" class="p-6 bg-gray-50 rounded-b-xl flex gap-2"><input type="text" id="comment-modal-input" placeholder="Add a comment..." class="flex-grow p-2 border border-gray-300 rounded-lg" /><button type="submit" class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700">Send</button></form>
+        </div>
+    </div>
+    <div id="profile-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b flex justify-between items-center"><h3 class="text-xl font-bold text-gray-800">Edit Profile</h3><button id="profile-modal-close" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button></div>
+            <form id="profile-form" class="p-6 space-y-4">
+                <div><label class="text-sm font-medium text-gray-700">Name</label><input id="profile-name" type="text" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg" /></div>
+                <div><label class="text-sm font-medium text-gray-700">Email</label><input id="profile-email" type="email" readonly class="w-full mt-1 p-2 border border-gray-300 rounded-lg bg-gray-100" /></div>
+                <p id="profile-form-message" class="hidden text-sm"></p>
+                <div class="flex justify-end pt-2"><button type="submit" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700">Save Changes</button></div>
+            </form>
         </div>
     </div>
     <div id="edit-staff-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -368,6 +385,7 @@
             let currentUnsubscribes = [];
             let currentCommentingTask = null;
             let alarmCheckInterval = null;
+            let selfRegistrationAllowed = null;
 
             // --- Element References ---
             const loadingIndicator = document.getElementById('loading-indicator');
@@ -377,11 +395,18 @@
             const authError = document.getElementById('auth-error');
             const authForm = document.getElementById('auth-form');
             const authToggle = document.getElementById('auth-toggle');
-            const logoutButton = document.getElementById('logout-button');
-            const settingsButton = document.getElementById('settings-button');
+            const authTitle = document.getElementById('auth-title');
+            const authSubtitle = document.getElementById('auth-subtitle');
+            const authButton = document.getElementById('auth-button');
+            const accountMenuButton = document.getElementById('account-menu-button');
+            const accountMenu = document.getElementById('account-menu');
+            const menuEditProfile = document.getElementById('menu-edit-profile');
+            const menuAddSubusers = document.getElementById('menu-add-subusers');
+            const menuLogout = document.getElementById('menu-logout');
             const navTasksButton = document.getElementById('nav-tasks-button');
             const navProjectsButton = document.getElementById('nav-projects-button');
             const installButton = document.getElementById('install-button');
+            const subuserFormMessage = document.getElementById('subuser-form-message');
 
             const projectsContainer = document.getElementById('projects-container');
             const projectsSectionTitle = document.getElementById('projects-section-title');
@@ -393,6 +418,7 @@
             // Modal Elements
             const commentModal = document.getElementById('comment-modal');
             const notificationModal = document.getElementById('notification-modal');
+            const profileModal = document.getElementById('profile-modal');
             const editStaffModal = document.getElementById('edit-staff-modal');
             const editTaskModal = document.getElementById('edit-task-modal');
             const confirmModal = document.getElementById('confirm-modal');
@@ -401,6 +427,8 @@
             const editProjectModal = document.getElementById('edit-project-modal');
             const editTaskForm = document.getElementById('edit-task-form');
             const editProjectForm = document.getElementById('edit-project-form');
+            const profileForm = document.getElementById('profile-form');
+            const profileFormMessage = document.getElementById('profile-form-message');
 
             // Collapsible Form Elements
             const assignTaskHeader = document.getElementById('assign-task-header');
@@ -477,6 +505,100 @@
                 appError.textContent = `${message} Please check console. This may be a Firestore security rule issue.`;
                 appError.classList.remove('hidden');
             }
+
+            function setInlineMessage(element, message, isError = false) {
+                if (!message) {
+                    element.textContent = '';
+                    element.className = 'hidden text-sm';
+                    return;
+                }
+                element.textContent = message;
+                element.className = `text-sm mt-3 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            }
+
+            function setAuthMode(mode) {
+                const isSignup = mode === 'signup';
+                authForm.dataset.view = isSignup ? 'signup' : 'login';
+                authTitle.textContent = isSignup ? 'Create Admin Account' : 'Sign In';
+                authButton.textContent = isSignup ? 'Create Account' : 'Sign In';
+                authToggle.textContent = isSignup ? 'Already have an account? Sign In' : 'Need an account? Sign Up';
+                authSubtitle.textContent = isSignup
+                    ? 'Create the first admin account'
+                    : (selfRegistrationAllowed ? 'Sign in to manage your team' : 'Sign in with an admin-created sub user account');
+                authToggle.classList.toggle('hidden', !selfRegistrationAllowed);
+                if (!selfRegistrationAllowed && isSignup) {
+                    authForm.dataset.view = 'login';
+                    authTitle.textContent = 'Sign In';
+                    authButton.textContent = 'Sign In';
+                }
+                authError.classList.add('hidden');
+            }
+
+            async function refreshSelfRegistrationState() {
+                const adminSnap = await db.collection(`/artifacts/${appId}/public/data/users`)
+                    .where('role', '==', 'admin')
+                    .limit(1)
+                    .get();
+                selfRegistrationAllowed = adminSnap.empty;
+                setAuthMode(authForm.dataset.view === 'signup' && selfRegistrationAllowed ? 'signup' : 'login');
+            }
+
+            async function upsertStaffRecord(name, email, uid) {
+                const normalizedEmail = email.toLowerCase();
+                const staffSnap = await db.collection(`/artifacts/${appId}/public/data/staff`)
+                    .where('email', '==', normalizedEmail)
+                    .limit(1)
+                    .get();
+                const data = { name, email: normalizedEmail, uid };
+                if (staffSnap.empty) {
+                    await db.collection(`/artifacts/${appId}/public/data/staff`).add(data);
+                } else {
+                    await db.collection(`/artifacts/${appId}/public/data/staff`).doc(staffSnap.docs[0].id).update(data);
+                }
+            }
+
+            async function createSubUser(name, email, password) {
+                const normalizedEmail = email.trim().toLowerCase();
+                const trimmedName = name.trim();
+                if (!trimmedName || !normalizedEmail || password.length < 6) {
+                    throw new Error('Name, email, and a 6+ character password are required.');
+                }
+
+                const secondaryAppName = `subuser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryAppName);
+                const secondaryAuth = secondaryApp.auth();
+
+                try {
+                    const credential = await secondaryAuth.createUserWithEmailAndPassword(normalizedEmail, password);
+                    const newUser = credential.user;
+                    await db.collection(`/artifacts/${appId}/public/data/users`).doc(newUser.uid).set({
+                        name: trimmedName,
+                        email: normalizedEmail,
+                        role: 'user',
+                        active: true,
+                        createdBy: currentUser.email,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    await upsertStaffRecord(trimmedName, normalizedEmail, newUser.uid);
+                } finally {
+                    await secondaryAuth.signOut().catch(() => {});
+                    await secondaryApp.delete().catch(() => {});
+                }
+            }
+
+            async function updateCurrentProfile(name) {
+                const trimmedName = name.trim();
+                if (!trimmedName || !currentUser) {
+                    throw new Error('Name is required.');
+                }
+                await db.collection(`/artifacts/${appId}/public/data/users`).doc(currentUser.uid).update({
+                    name: trimmedName,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                if (currentUser.email && currentUserProfile?.role !== 'admin') {
+                    await upsertStaffRecord(trimmedName, currentUser.email, currentUser.uid);
+                }
+            }
             
             function showMainSection(sectionId) {
                 document.querySelectorAll('.main-section').forEach(section => section.classList.add('hidden'));
@@ -484,7 +606,6 @@
 
                 navTasksButton.classList.toggle('active', sectionId === 'tasks-page');
                 navProjectsButton.classList.toggle('active', sectionId === 'projects-page');
-                settingsButton.classList.toggle('bg-blue-200', sectionId === 'settings-page');
 
                 if (sectionId === 'settings-page') {
                     navTasksButton.classList.remove('active');
@@ -949,10 +1070,6 @@
                 staffListContainer.innerHTML = staff.length > 0 ? staff.map(s => `
                     <div class="flex justify-between items-center text-sm py-1">
                         <div><p class="font-semibold text-gray-700">${s.name}</p><p class="text-gray-500 text-xs">${s.email}</p></div>
-                        <div class="flex gap-2">
-                            <button class="edit-staff-button text-blue-500 text-xs" data-id="${s.id}" data-name="${s.name}" data-email="${s.email}">Edit</button>
-                            <button class="remove-staff-button text-red-500 text-xs" data-id="${s.id}">Remove</button>
-                        </div>
                     </div>`).join('') : `<p class="text-gray-500 text-xs text-center">No staff added.</p>`;
 
                 projectStaffSelection.innerHTML = staff.length > 0 ? staff.map(s => `
@@ -1079,14 +1196,39 @@
                     });
 
                     if (userDocSnap && !userDocSnap.exists) {
-                        // This is a brand new user. For this client-side app, we'll default them to 'user'.
-                        // The very first user ever must be promoted to 'admin' manually in the Firestore console for security.
-                        const newUserProfile = { email: user.email, role: 'user' };
-                        await userDocRef.set(newUserProfile).catch(error => {
-                            showAppError('Error creating user profile.', error);
-                            auth.signOut();
+                        const adminSnap = await db.collection(`/artifacts/${appId}/public/data/users`)
+                            .where('role', '==', 'admin')
+                            .limit(1)
+                            .get()
+                            .catch(error => {
+                                showAppError('Could not verify admin status.', error);
+                                auth.signOut();
+                                return null;
+                            });
+
+                        if (!adminSnap) {
                             return;
-                        });
+                        }
+
+                        if (adminSnap.empty) {
+                            await userDocRef.set({
+                                name: (user.email || 'admin').split('@')[0],
+                                email: (user.email || '').toLowerCase(),
+                                role: 'admin',
+                                active: true,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            }).catch(error => {
+                                showAppError('Error creating admin profile.', error);
+                                auth.signOut();
+                                return;
+                            });
+                            selfRegistrationAllowed = false;
+                        } else {
+                            authError.textContent = 'This account is not provisioned. Ask the admin to add you as a sub user.';
+                            authError.classList.remove('hidden');
+                            await auth.signOut();
+                            return;
+                        }
                     }
 
                     appScreen.classList.remove('hidden');
@@ -1096,12 +1238,18 @@
                         if (doc.exists) {
                             currentUserProfile = doc.data();
                             if (currentUserProfile) {
+                                if (currentUserProfile.active === false) {
+                                    authError.textContent = 'This account has been disabled by the admin.';
+                                    authError.classList.remove('hidden');
+                                    auth.signOut();
+                                    return;
+                                }
                                 const isAdmin = currentUserProfile.role === 'admin';
                                 appError.classList.add('hidden');
-                                document.getElementById('user-info-badge').innerHTML = `<span>${user.email} (${currentUserProfile.role})</span>`;
+                                document.getElementById('user-info-badge').innerHTML = `<span>${currentUserProfile.name || user.email} (${currentUserProfile.role})</span>`;
                                 document.getElementById('user-info-badge').className = `mt-1 text-xs text-white inline-flex items-center gap-2 px-2 py-1 rounded ${isAdmin ? 'bg-green-600' : 'bg-blue-600'}`;
                                 
-                                settingsButton.classList.toggle('hidden', !isAdmin);
+                                menuAddSubusers.classList.toggle('hidden', !isAdmin);
                                 document.getElementById('task-for-all-form').style.display = isAdmin ? 'flex' : 'none';
                                 document.getElementById('admin-create-project-container').classList.toggle('hidden', !isAdmin);
                                 document.getElementById('admin-assign-task-container').classList.toggle('hidden', !isAdmin);
@@ -1128,6 +1276,7 @@
                     authScreen.classList.remove('hidden');
                     currentUnsubscribes.forEach(unsub => unsub());
                     if(alarmCheckInterval) clearInterval(alarmCheckInterval);
+                    refreshSelfRegistrationState().catch(error => showAppError('Could not load auth mode.', error));
                 }
             });
 
@@ -1138,32 +1287,46 @@
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
                 const isLogin = authForm.dataset.view === 'login';
+                if (!isLogin && !selfRegistrationAllowed) {
+                    authError.textContent = 'Self sign-up is disabled. Ask the admin to add you as a sub user.';
+                    authError.classList.remove('hidden');
+                    return;
+                }
                 const promise = isLogin ? auth.signInWithEmailAndPassword(email, password) : auth.createUserWithEmailAndPassword(email, password);
                 promise.catch(err => { authError.textContent = err.message; authError.classList.remove('hidden'); });
             });
 
             authToggle.addEventListener('click', () => {
-                const isCurrentlyLogin = authForm.dataset.view === 'login';
-
-                if (isCurrentlyLogin) {
-                    authForm.dataset.view = 'signup';
-                    document.getElementById('auth-title').textContent = 'Create Account';
-                    document.getElementById('auth-button').textContent = 'Create Account';
-                    authToggle.textContent = 'Already have an account? Sign In';
-                } else {
-                    authForm.dataset.view = 'login';
-                    document.getElementById('auth-title').textContent = 'Sign In';
-                    document.getElementById('auth-button').textContent = 'Sign In';
-                    authToggle.textContent = 'Need an account? Sign Up';
+                if (!selfRegistrationAllowed) {
+                    setAuthMode('login');
+                    return;
                 }
-                authError.classList.add('hidden');
+                const isCurrentlyLogin = authForm.dataset.view === 'login';
+                setAuthMode(isCurrentlyLogin ? 'signup' : 'login');
             });
-            authForm.dataset.view = 'login';
+            setAuthMode('login');
 
-            logoutButton.addEventListener('click', () => auth.signOut());
-            settingsButton.addEventListener('click', () => showMainSection('settings-page'));
+            accountMenuButton.addEventListener('click', () => accountMenu.classList.toggle('hidden'));
+            menuLogout.addEventListener('click', () => auth.signOut());
+            menuAddSubusers.addEventListener('click', () => {
+                accountMenu.classList.add('hidden');
+                showMainSection('settings-page');
+            });
+            menuEditProfile.addEventListener('click', () => {
+                accountMenu.classList.add('hidden');
+                document.getElementById('profile-name').value = currentUserProfile?.name || (currentUser?.email || '').split('@')[0];
+                document.getElementById('profile-email').value = currentUser?.email || '';
+                setInlineMessage(profileFormMessage, '');
+                profileModal.classList.remove('hidden');
+            });
             navTasksButton.addEventListener('click', () => showMainSection('tasks-page'));
             navProjectsButton.addEventListener('click', () => showMainSection('projects-page'));
+            document.getElementById('profile-modal-close').addEventListener('click', () => profileModal.classList.add('hidden'));
+            document.addEventListener('click', event => {
+                if (!accountMenu.contains(event.target) && !accountMenuButton.contains(event.target)) {
+                    accountMenu.classList.add('hidden');
+                }
+            });
 
             // Collapsible Form Headers
             let assignTaskTimeout, createProjectTimeout;
@@ -1174,10 +1337,23 @@
                 e.preventDefault();
                 const name = document.getElementById('new-staff-name').value.trim();
                 const email = document.getElementById('new-staff-email').value.trim();
-                if (name && email) {
-                    db.collection(`/artifacts/${appId}/public/data/staff`).add({ name, email: email.toLowerCase() });
-                    e.target.reset();
-                }
+                const password = document.getElementById('new-staff-password').value;
+                createSubUser(name, email, password)
+                    .then(() => {
+                        e.target.reset();
+                        setInlineMessage(subuserFormMessage, 'Sub user created successfully.');
+                    })
+                    .catch(error => setInlineMessage(subuserFormMessage, error.message, true));
+            });
+
+            profileForm.addEventListener('submit', e => {
+                e.preventDefault();
+                updateCurrentProfile(document.getElementById('profile-name').value)
+                    .then(() => {
+                        setInlineMessage(profileFormMessage, 'Profile updated successfully.');
+                        setTimeout(() => profileModal.classList.add('hidden'), 600);
+                    })
+                    .catch(error => setInlineMessage(profileFormMessage, error.message, true));
             });
             
             document.getElementById('create-project-form').addEventListener('submit', e => {

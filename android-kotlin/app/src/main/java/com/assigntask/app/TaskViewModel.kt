@@ -3,6 +3,9 @@ package com.assigntask.app
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import java.util.UUID
 
 private const val WEB_APP_ID = "1:90081570769:web:1349e338f08c1643003af0"
 private const val BASE = "/artifacts/$WEB_APP_ID/public/data"
@@ -49,6 +53,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _selfRegistrationAllowed = MutableStateFlow<Boolean?>(null)
+    val selfRegistrationAllowed: StateFlow<Boolean?> = _selfRegistrationAllowed.asStateFlow()
+
     private val _projectTasks = MutableStateFlow<Map<String, List<Task>>>(emptyMap())
     val projectTasks: StateFlow<Map<String, List<Task>>> = _projectTasks.asStateFlow()
 
@@ -56,6 +63,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val projectTaskListeners = mutableMapOf<String, ListenerRegistration>()
 
     init {
+        db.collection("$BASE/users")
+            .whereEqualTo("role", "admin")
+            .limit(1)
+            .addSnapshotListener { snap, _ ->
+                _selfRegistrationAllowed.value = snap?.isEmpty != false
+            }
+
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
             if (user == null) {
@@ -71,27 +85,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         clearDataListeners()
         _authState.value = AuthState.Loading
         viewModelScope.launch {
-            val profile = try {
-                val doc = db.collection("$BASE/users").document(user.uid).get().await()
-                if (doc.exists()) {
-                    UserProfile(
-                        email = doc.getString("email") ?: user.email ?: "",
-                        role = doc.getString("role") ?: "user"
-                    )
-                } else {
-                    val usersSnap = db.collection("$BASE/users").get().await()
-                    val role = if (usersSnap.isEmpty) "admin" else "user"
-                    val p = UserProfile(email = user.email ?: "", role = role)
-                    db.collection("$BASE/users").document(user.uid)
-                        .set(mapOf("email" to p.email, "role" to p.role)).await()
-                    p
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error loading profile: ${e.message}"
-                UserProfile(email = user.email ?: "", role = "user")
+            val profile = resolveUserProfile(user)
+            if (profile == null) {
+                _authState.value = AuthState.LoggedOut
+                return@launch
             }
             _authState.value = AuthState.LoggedIn(user, profile)
             setupFirestoreListeners(user, profile)
+        }
+    }
+
+    private suspend fun resolveUserProfile(user: FirebaseUser): UserProfile? {
+        return try {
+            val doc = db.collection("$BASE/users").document(user.uid).get().await()
+            if (doc.exists()) {
+                val active = doc.getBoolean("active") ?: true
+                if (!active) {
+                    _errorMessage.value = "This account has been disabled by the admin."
+                    auth.signOut()
+                    return null
+                }
+                UserProfile(
+                    name = doc.getString("name") ?: "",
+                    email = doc.getString("email") ?: user.email ?: "",
+                    role = doc.getString("role") ?: "user",
+                    active = active
+                )
+            } else {
+                val adminExists = db.collection("$BASE/users")
+                    .whereEqualTo("role", "admin")
+                    .limit(1)
+                    .get()
+                    .await()
+                    .isEmpty
+                    .not()
+
+                if (adminExists) {
+                    _errorMessage.value = "This account is not provisioned. Ask the admin to add you as a sub user."
+                    auth.signOut()
+                    null
+                } else {
+                    val profile = UserProfile(
+                        name = user.email?.substringBefore('@') ?: "Admin",
+                        email = user.email ?: "",
+                        role = "admin",
+                        active = true
+                    )
+                    db.collection("$BASE/users").document(user.uid).set(
+                        mapOf(
+                            "name" to profile.name,
+                            "email" to profile.email,
+                            "role" to profile.role,
+                            "active" to profile.active,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                    profile
+                }
+            }
+        } catch (e: Exception) {
+            _errorMessage.value = "Error loading profile: ${e.message}"
+            auth.signOut()
+            null
         }
     }
 
@@ -119,7 +174,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .orderBy("name")
                 .addSnapshotListener { snap, _ ->
                     _staff.value = snap?.documents?.map { doc ->
-                        Staff(id = doc.id, name = doc.getString("name") ?: "", email = doc.getString("email") ?: "")
+                        Staff(
+                            id = doc.id,
+                            name = doc.getString("name") ?: "",
+                            email = doc.getString("email") ?: "",
+                            uid = doc.getString("uid") ?: ""
+                        )
                     } ?: emptyList()
                 }
             // All projects
@@ -202,8 +262,120 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signUp(email: String, password: String, onError: (String) -> Unit) {
         viewModelScope.launch {
-            try { auth.createUserWithEmailAndPassword(email, password).await() }
+            try {
+                if (_selfRegistrationAllowed.value == false) {
+                    onError("Self sign-up is disabled. Ask the admin to add you as a sub user.")
+                    return@launch
+                }
+                auth.createUserWithEmailAndPassword(email.trim(), password).await()
+            }
             catch (e: Exception) { onError(e.message ?: "Sign up failed") }
+        }
+    }
+
+    fun createSubUser(name: String, email: String, password: String, adminEmail: String, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val normalizedEmail = email.trim().lowercase()
+            val trimmedName = name.trim()
+            if (trimmedName.isBlank() || normalizedEmail.isBlank()) {
+                onResult("Name and email are required")
+                return@launch
+            }
+            if (password.length < 6) {
+                onResult("Password must be at least 6 characters")
+                return@launch
+            }
+
+            var secondaryApp: FirebaseApp? = null
+            try {
+                val options = FirebaseApp.getInstance().options
+                val secondaryOptions = FirebaseOptions.Builder()
+                    .setApiKey(options.apiKey)
+                    .setApplicationId(options.applicationId)
+                    .setProjectId(options.projectId)
+                    .setStorageBucket(options.storageBucket)
+                    .setGcmSenderId(options.gcmSenderId)
+                    .build()
+                secondaryApp = FirebaseApp.initializeApp(
+                    getApplication(),
+                    secondaryOptions,
+                    "subuser-${UUID.randomUUID()}"
+                )
+                val secondaryAuth = FirebaseAuth.getInstance(secondaryApp!!)
+                val newUser = secondaryAuth.createUserWithEmailAndPassword(normalizedEmail, password).await().user
+                    ?: throw IllegalStateException("Firebase did not return a new user")
+
+                db.collection("$BASE/users").document(newUser.uid).set(
+                    mapOf(
+                        "name" to trimmedName,
+                        "email" to normalizedEmail,
+                        "role" to "user",
+                        "active" to true,
+                        "createdBy" to adminEmail,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+
+                upsertStaffRecord(trimmedName, normalizedEmail, newUser.uid)
+                secondaryAuth.signOut()
+                secondaryApp?.delete()
+                onResult(null)
+            } catch (e: Exception) {
+                secondaryApp?.delete()
+                onResult(e.message ?: "Failed to create sub user")
+            }
+        }
+    }
+
+    fun updateCurrentProfile(name: String, onResult: (String?) -> Unit) {
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            onResult("No active user")
+            return
+        }
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            onResult("Name is required")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                db.collection("$BASE/users").document(currentUser.uid)
+                    .update(
+                        mapOf(
+                            "name" to trimmedName,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                    .await()
+
+                val state = _authState.value
+                if (state is AuthState.LoggedIn) {
+                    if (!state.profile.isAdmin) {
+                        currentUser.email?.trim()?.lowercase()?.let { upsertStaffRecord(trimmedName, it, currentUser.uid) }
+                    }
+                    _authState.value = state.copy(profile = state.profile.copy(name = trimmedName))
+                }
+                onResult(null)
+            } catch (e: Exception) {
+                onResult(e.message ?: "Failed to update profile")
+            }
+        }
+    }
+
+    private suspend fun upsertStaffRecord(name: String, email: String, uid: String) {
+        val existing = db.collection("$BASE/staff")
+            .whereEqualTo("email", email)
+            .limit(1)
+            .get()
+            .await()
+
+        val data = mapOf("name" to name, "email" to email, "uid" to uid)
+        if (existing.documents.isEmpty()) {
+            db.collection("$BASE/staff").add(data).await()
+        } else {
+            db.collection("$BASE/staff").document(existing.documents.first().id).update(data).await()
         }
     }
 

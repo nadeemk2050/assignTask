@@ -70,6 +70,14 @@ fun AuthScreen(vm: AppViewModel) {
     var password by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    val selfRegistrationAllowed by vm.selfRegistrationAllowed.collectAsState()
+    val globalError by vm.errorMessage.collectAsState()
+
+    LaunchedEffect(selfRegistrationAllowed) {
+        if (selfRegistrationAllowed == false) {
+            isSignUp = false
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState()),
@@ -80,10 +88,21 @@ fun AuthScreen(vm: AppViewModel) {
         Spacer(Modifier.height(12.dp))
         Text("Project & Task Board", style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Text(if (isSignUp) "Create your account" else "Sign in to manage your team",
+        Text(
+            when {
+                selfRegistrationAllowed == null -> "Checking workspace access..."
+                isSignUp -> "Create the first admin account"
+                selfRegistrationAllowed == false -> "Sign in with an admin-created sub user account"
+                else -> "Sign in to manage your team"
+            },
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
             modifier = Modifier.align(Alignment.CenterHorizontally))
         Spacer(Modifier.height(24.dp))
+
+        globalError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+        }
 
         errorMsg?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -105,12 +124,22 @@ fun AuthScreen(vm: AppViewModel) {
                 if (isSignUp) vm.signUp(email, password) { errorMsg = it }
                 else vm.signIn(email, password) { errorMsg = it }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = selfRegistrationAllowed != null
         ) { Text(if (isSignUp) "Create Account" else "Sign In") }
 
-        TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null },
-            modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text(if (isSignUp) "Already have an account? Sign In" else "Need an account? Sign Up")
+        if (selfRegistrationAllowed == true) {
+            TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null },
+                modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(if (isSignUp) "Already have an account? Sign In" else "Need an account? Sign Up")
+            }
+        } else if (selfRegistrationAllowed == false) {
+            Text(
+                "Only the first account can sign up here. After that, the admin must add sub users.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -126,19 +155,54 @@ fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     // Dialog state
     var commentState by remember { mutableStateOf<CommentDialogState?>(null) }
     var editTaskState by remember { mutableStateOf<EditTaskDialogState?>(null) }
+    var accountMenuExpanded by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Project & Task Board", style = MaterialTheme.typography.titleMedium) },
+                navigationIcon = {
+                    Box {
+                        IconButton(onClick = { accountMenuExpanded = true }) {
+                            Icon(Icons.Default.Menu, "Account menu")
+                        }
+                        DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Profile") },
+                                leadingIcon = { Icon(Icons.Default.Person, null) },
+                                onClick = {
+                                    accountMenuExpanded = false
+                                    showProfileDialog = true
+                                }
+                            )
+                            if (profile.isAdmin) {
+                                DropdownMenuItem(
+                                    text = { Text("Add Sub Users") },
+                                    leadingIcon = { Icon(Icons.Default.GroupAdd, null) },
+                                    onClick = {
+                                        accountMenuExpanded = false
+                                        selectedTab = tabs.indexOf("Settings").coerceAtLeast(0)
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Logout") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
+                                onClick = {
+                                    accountMenuExpanded = false
+                                    vm.signOut()
+                                }
+                            )
+                        }
+                    }
+                },
                 actions = {
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 4.dp)) {
+                        Text(profile.displayName, style = MaterialTheme.typography.labelSmall)
                         Text(user.email ?: "", style = MaterialTheme.typography.labelSmall)
                         Text(profile.role, style = MaterialTheme.typography.labelSmall,
                             color = if (profile.isAdmin) Color(0xFF16A34A) else MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = { vm.signOut() }) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, "Sign out")
                     }
                 }
             )
@@ -170,10 +234,14 @@ fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
                 "Projects" -> ProjectsPage(vm, user, profile,
                     onShowComments = { task, type, pId -> commentState = CommentDialogState(task, type, pId) },
                     onEditTask = { task, type, pId -> editTaskState = EditTaskDialogState(task, type, pId) })
-                "Settings" -> SettingsPage(vm)
+                "Settings" -> SettingsPage(vm, user, profile)
                 else -> Unit
             }
         }
+    }
+
+    if (showProfileDialog) {
+        EditProfileDialog(profile = profile, vm = vm, onDismiss = { showProfileDialog = false })
     }
 
     commentState?.let { state ->
@@ -537,76 +605,112 @@ fun UserProjectTaskForm(projectId: String, vm: AppViewModel, user: FirebaseUser)
 // ─── Settings Page ────────────────────────────────────────────────────────────
 
 @Composable
-fun SettingsPage(vm: AppViewModel) {
+fun SettingsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     val staff by vm.staff.collectAsState()
     var newName by remember { mutableStateOf("") }
     var newEmail by remember { mutableStateOf("") }
-    var editingStaff by remember { mutableStateOf<Staff?>(null) }
-    var editName by remember { mutableStateOf("") }
-    var editEmail by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var submitError by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { SectionHeader("Staff Management") }
+        item { SectionHeader(if (profile.isAdmin) "Sub User Management" else "Profile") }
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Add New Staff", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(value = newName, onValueChange = { newName = it },
-                        label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(value = newEmail, onValueChange = { newEmail = it },
-                        label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = {
-                        if (newName.isNotBlank() && newEmail.isNotBlank()) {
-                            vm.addStaff(newName, newEmail); newName = ""; newEmail = ""
+                    if (profile.isAdmin) {
+                        Text("Add New Sub User", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(value = newName, onValueChange = { newName = it; submitError = null },
+                            label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(value = newEmail, onValueChange = { newEmail = it; submitError = null },
+                            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(value = newPassword, onValueChange = { newPassword = it; submitError = null },
+                            label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            visualTransformation = PasswordVisualTransformation())
+                        if (submitError != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(submitError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Add Staff") }
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = {
+                            vm.createSubUser(newName, newEmail, newPassword, user.email ?: "") { err ->
+                                submitError = err
+                                if (err == null) {
+                                    newName = ""
+                                    newEmail = ""
+                                    newPassword = ""
+                                }
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Save Sub User") }
+                    } else {
+                        Text("Your account is managed by the admin.", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Text(profile.displayName, fontWeight = FontWeight.SemiBold)
+                        Text(profile.email, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+                    }
                 }
             }
         }
-        items(staff, key = { it.id }) { s ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    if (editingStaff?.id == s.id) {
-                        OutlinedTextField(value = editName, onValueChange = { editName = it },
-                            label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        Spacer(Modifier.height(4.dp))
-                        OutlinedTextField(value = editEmail, onValueChange = { editEmail = it },
-                            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        Spacer(Modifier.height(4.dp))
-                        Row {
-                            Button(onClick = { vm.editStaff(s.id, editName, editEmail); editingStaff = null },
-                                modifier = Modifier.weight(1f)) { Text("Save") }
-                            Spacer(Modifier.width(8.dp))
-                            OutlinedButton(onClick = { editingStaff = null }, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(s.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                                Text(s.email, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
-                            }
-                            TextButton(onClick = { editingStaff = s; editName = s.name; editEmail = s.email }) { Text("Edit") }
-                            TextButton(onClick = { vm.removeStaff(s.id) },
-                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Remove") }
+        if (profile.isAdmin) {
+            item { Text("Existing Sub Users", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
+            items(staff, key = { it.id }) { s ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(s.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            Text(s.email, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
                         }
                     }
                 }
             }
         }
-        if (staff.isEmpty()) {
+        if (profile.isAdmin && staff.isEmpty()) {
             item {
-                Text("No staff added yet.", style = MaterialTheme.typography.bodyMedium,
+                Text("No sub users added yet.", style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(0.6f), modifier = Modifier.padding(8.dp))
             }
         }
     }
+}
+
+@Composable
+fun EditProfileDialog(profile: UserProfile, vm: AppViewModel, onDismiss: () -> Unit) {
+    var name by remember(profile.name, profile.email) { mutableStateOf(profile.displayName) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Profile") },
+        text = {
+            Column {
+                OutlinedTextField(value = name, onValueChange = { name = it; error = null },
+                    label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = profile.email, onValueChange = {}, readOnly = true,
+                    label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                vm.updateCurrentProfile(name) { err ->
+                    error = err
+                    if (err == null) onDismiss()
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 // ─── Shared Components ────────────────────────────────────────────────────────
