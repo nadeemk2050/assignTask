@@ -53,26 +53,29 @@ jobs:
       # Get token free at: https://appetize.io/account
       # ------------------------------------------------------------------
       - name: Upload APK to Appetize.io
-        if: ${{ secrets.APPETIZE_API_TOKEN != '' }}
+        if: ${{ env.APPETIZE_API_TOKEN != '' }}
         id: appetize
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+          APPETIZE_APP_KEY: ${{ secrets.APPETIZE_APP_KEY }}
         run: |
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
           # Check if a previous app key exists (update) or create new
-          APP_KEY="${{ secrets.APPETIZE_APP_KEY }}"
+          APP_KEY="${APPETIZE_APP_KEY}"
 
           if [ -z "$APP_KEY" ]; then
             echo "Creating new Appetize app..."
             RESPONSE=$(curl -s -X POST \
               "https://api.appetize.io/v1/apps" \
-              -H "Authorization: Bearer ${{ secrets.APPETIZE_API_TOKEN }}" \
+              -H "Authorization: Bearer ${APPETIZE_API_TOKEN}" \
               -F "file=@${APK_PATH}" \
               -F "platform=android")
           else
             echo "Updating existing Appetize app ($APP_KEY)..."
             RESPONSE=$(curl -s -X POST \
               "https://api.appetize.io/v1/apps/${APP_KEY}" \
-              -H "Authorization: Bearer ${{ secrets.APPETIZE_API_TOKEN }}" \
+              -H "Authorization: Bearer ${APPETIZE_API_TOKEN}" \
               -F "file=@${APK_PATH}" \
               -F "platform=android")
           fi
@@ -87,7 +90,9 @@ jobs:
           echo "========================================"
 
       - name: Add Appetize link to job summary
-        if: ${{ secrets.APPETIZE_API_TOKEN != '' && steps.appetize.outputs.appetize_key != '' }}
+        if: ${{ env.APPETIZE_API_TOKEN != '' && steps.appetize.outputs.appetize_key != '' }}
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
           ## App Live on Appetize.io
