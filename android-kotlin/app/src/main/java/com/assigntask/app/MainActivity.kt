@@ -106,6 +106,7 @@ fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
                     "tasksForAll" -> TasksForAllPage(vm, user)
                     "individualTasks" -> IndividualTasksPage(vm, user)
                     "projects" -> ProjectsPage(vm, user)
+                    "addSubUser" -> AddSubUserDialog(vm, user) { currentPage = "tasksForAll" }
                     "profile" -> UserProfilePage(profile, vm, onBack = { currentPage = "tasksForAll" })
                 }
             }
@@ -148,6 +149,13 @@ fun NavigationDrawerContent(
             selected = currentPage == "projects",
             onClick = { onPageSelect("projects") }
         )
+
+        NavigationDrawerItem(
+            label = { Text("Add Sub User") },
+            icon = { Icon(Icons.Default.PersonAdd, null) },
+            selected = currentPage == "addSubUser",
+            onClick = { onPageSelect("addSubUser") }
+        )
         
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         
@@ -175,6 +183,7 @@ fun pageTitle(page: String): String = when (page) {
     "tasksForAll" -> "Tasks For All"
     "individualTasks" -> "Individual Tasks"
     "projects" -> "Projects"
+    "addSubUser" -> "Add Sub User"
     "profile" -> "User Profile"
     else -> "Project & Task Board"
 }
@@ -436,6 +445,89 @@ fun ProjectsPage(vm: AppViewModel, user: FirebaseUser) {
     if (showAddDialog) {
         AddProjectDialog(vm, staff, user) { showAddDialog = false }
     }
+}
+
+@Composable
+fun AddSubUserDialog(vm: AppViewModel, user: FirebaseUser, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text("Add Sub User") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; error = null },
+                    label = { Text("User Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it; error = null },
+                    label = { Text("Email Address") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    label = { Text("Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it; error = null },
+                    label = { Text("Confirm Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Text(
+                    "This creates a new Firebase Auth account and adds the user to your team staff list.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                )
+                if (error != null) {
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading,
+                onClick = {
+                    when {
+                        name.isBlank() -> error = "User name is required"
+                        email.isBlank() -> error = "Email address is required"
+                        password.length < 6 -> error = "Password must be at least 6 characters"
+                        password != confirmPassword -> error = "Passwords do not match"
+                        else -> {
+                            loading = true
+                            vm.createSubUser(name, email, password, user.email ?: "") { result ->
+                                loading = false
+                                if (result == null) onDismiss() else error = result
+                            }
+                        }
+                    }
+                }
+            ) {
+                Text(if (loading) "Creating..." else "Create")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
