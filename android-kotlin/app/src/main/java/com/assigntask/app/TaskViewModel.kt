@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.ktx.auth
@@ -24,6 +25,7 @@ import java.util.UUID
 
 private const val WEB_APP_ID = "1:90081570769:web:1349e338f08c1643003af0"
 private const val BASE = "/artifacts/$WEB_APP_ID/public/data"
+const val ADMIN_ACTION_PASSWORD = "abcd"
 
 sealed class AuthState {
     object Loading : AuthState()
@@ -106,18 +108,60 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     auth.signOut()
                     return null
                 }
+                val email = doc.getString("email") ?: user.email ?: ""
+                val role = doc.getString("role") ?: "user"
+                var ownerAdminUid = doc.getString("ownerAdminUid").orEmpty()
+                var ownerAdminEmail = (doc.getString("ownerAdminEmail")
+                    ?: doc.getString("createdBy")
+                    ?: if (role == "admin") email else "").lowercase()
+
+                if (role == "admin") {
+                    ownerAdminUid = user.uid
+                    ownerAdminEmail = email.lowercase()
+                    if (doc.getString("ownerAdminUid") != user.uid || doc.getString("ownerAdminEmail") != ownerAdminEmail) {
+                        db.collection("$BASE/users").document(user.uid).update(
+                            mapOf(
+                                "ownerAdminUid" to user.uid,
+                                "ownerAdminEmail" to ownerAdminEmail
+                            )
+                        ).await()
+                    }
+                } else if (ownerAdminUid.isBlank() && ownerAdminEmail.isNotBlank()) {
+                    val ownerDoc = db.collection("$BASE/users")
+                        .whereEqualTo("role", "admin")
+                        .whereEqualTo("email", ownerAdminEmail)
+                        .limit(1)
+                        .get()
+                        .await()
+                        .documents
+                        .firstOrNull()
+                    ownerAdminUid = ownerDoc?.id.orEmpty()
+                    if (ownerAdminUid.isNotBlank()) {
+                        db.collection("$BASE/users").document(user.uid).update(
+                            mapOf(
+                                "ownerAdminUid" to ownerAdminUid,
+                                "ownerAdminEmail" to ownerAdminEmail
+                            )
+                        ).await()
+                    }
+                }
+
                 UserProfile(
                     name = doc.getString("name") ?: "",
-                    email = doc.getString("email") ?: user.email ?: "",
-                    role = doc.getString("role") ?: "user",
-                    active = active
+                    email = email,
+                    role = role,
+                    active = active,
+                    ownerAdminUid = ownerAdminUid,
+                    ownerAdminEmail = ownerAdminEmail
                 )
             } else {
                 val profile = UserProfile(
                     name = user.email?.substringBefore('@') ?: "Admin",
                     email = user.email ?: "",
                     role = "admin",
-                    active = true
+                    active = true,
+                    ownerAdminUid = user.uid,
+                    ownerAdminEmail = (user.email ?: "").lowercase()
                 )
                 db.collection("$BASE/users").document(user.uid).set(
                     mapOf(
@@ -125,6 +169,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "email" to profile.email,
                         "role" to profile.role,
                         "active" to profile.active,
+                        "ownerAdminUid" to profile.ownerAdminUid,
+                        "ownerAdminEmail" to profile.ownerAdminEmail,
                         "createdAt" to FieldValue.serverTimestamp()
                     )
                 ).await()
@@ -138,73 +184,145 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun setupFirestoreListeners(user: FirebaseUser, profile: UserProfile) {
-        // Tasks for all - everyone
-        dataListeners += db.collection("$BASE/tasks_for_all")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snap, _ ->
-                _tasksForAll.value = snap?.documents?.map { doc ->
-                    docToTask(doc.id, doc.data ?: emptyMap())
-                } ?: emptyList()
-            }
+        val teamOwnerUid = if (profile.isAdmin) user.uid else profile.ownerAdminUid.ifBlank { user.uid }
+        val teamOwnerEmail = if (profile.isAdmin) {
+            (user.email ?: profile.email).lowercase()
+        } else {
+            profile.ownerAdminEmail.ifBlank { profile.email.lowercase() }
+        }
 
         if (profile.isAdmin) {
-            // Individual tasks - all staff
-            dataListeners += db.collection("$BASE/tasks")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
+            var ownedEmails = setOf(teamOwnerEmail)
+            var rawTasksForAll = emptyList<Task>()
+            var rawTasks = emptyList<Task>()
+            var rawStaff = emptyList<Staff>()
+            var rawProjects = emptyList<Project>()
+
+            fun publishAdminScopedData() {
+                _tasksForAll.value = sortTasksDescending(rawTasksForAll.filter { task ->
+                    task.ownerAdminUid == teamOwnerUid ||
+                        (task.ownerAdminUid.isBlank() && task.createdBy.equals(teamOwnerEmail, ignoreCase = true))
+                })
+
+                _tasks.value = sortTasksDescending(rawTasks.filter { task ->
+                    task.ownerAdminUid == teamOwnerUid ||
+                        (task.ownerAdminUid.isBlank() && (
+                            task.createdBy.equals(teamOwnerEmail, ignoreCase = true) ||
+                                ownedEmails.contains(task.assigneeEmail.lowercase())
+                            ))
+                })
+
+                _staff.value = rawStaff.filter { staff ->
+                    staff.ownerAdminUid == teamOwnerUid ||
+                        (staff.ownerAdminUid.isBlank() && ownedEmails.contains(staff.email.lowercase()))
+                }.sortedBy { it.name.lowercase() }
+
+                _projects.value = rawProjects.filter { project ->
+                    project.ownerAdminUid == teamOwnerUid ||
+                        (project.ownerAdminUid.isBlank() && project.members.any { member ->
+                            ownedEmails.contains(member.lowercase())
+                        })
+                }
+            }
+
+            dataListeners += db.collection("$BASE/users")
                 .addSnapshotListener { snap, _ ->
-                    _tasks.value = snap?.documents?.map { doc ->
+                    ownedEmails = (snap?.documents?.mapNotNull { doc ->
+                        val email = doc.getString("email")?.lowercase() ?: return@mapNotNull null
+                        val role = doc.getString("role") ?: "user"
+                        val ownerUid = doc.getString("ownerAdminUid").orEmpty()
+                        val ownerEmail = (doc.getString("ownerAdminEmail")
+                            ?: doc.getString("createdBy")
+                            ?: "").lowercase()
+                        val belongsToAdmin = doc.id == user.uid ||
+                            ownerUid == teamOwnerUid ||
+                            (role != "admin" && ownerEmail == teamOwnerEmail)
+                        if (belongsToAdmin) email else null
+                    }?.toSet() ?: emptySet()) + teamOwnerEmail
+                    publishAdminScopedData()
+                }
+
+            dataListeners += db.collection("$BASE/tasks_for_all")
+                .addSnapshotListener { snap, _ ->
+                    rawTasksForAll = snap?.documents?.map { doc ->
                         docToTask(doc.id, doc.data ?: emptyMap())
                     } ?: emptyList()
+                    publishAdminScopedData()
                 }
-            // Staff list
-            dataListeners += db.collection("$BASE/staff")
-                .orderBy("name")
+
+            dataListeners += db.collection("$BASE/tasks")
                 .addSnapshotListener { snap, _ ->
-                    _staff.value = snap?.documents?.map { doc ->
+                    rawTasks = snap?.documents?.map { doc ->
+                        docToTask(doc.id, doc.data ?: emptyMap())
+                    } ?: emptyList()
+                    publishAdminScopedData()
+                }
+
+            dataListeners += db.collection("$BASE/staff")
+                .addSnapshotListener { snap, _ ->
+                    rawStaff = snap?.documents?.map { doc ->
                         Staff(
                             id = doc.id,
                             name = doc.getString("name") ?: "",
                             email = doc.getString("email") ?: "",
-                            uid = doc.getString("uid") ?: ""
+                            uid = doc.getString("uid") ?: "",
+                            ownerAdminUid = doc.getString("ownerAdminUid") ?: ""
                         )
                     } ?: emptyList()
+                    publishAdminScopedData()
                 }
-            // All projects
+
             dataListeners += db.collection("$BASE/projects")
                 .addSnapshotListener { snap, _ ->
-                    _projects.value = snap?.documents?.map { doc ->
+                    rawProjects = snap?.documents?.map { doc ->
                         @Suppress("UNCHECKED_CAST")
                         Project(
                             id = doc.id,
                             name = doc.getString("name") ?: "",
+                            ownerAdminUid = doc.getString("ownerAdminUid") ?: "",
                             members = (doc.get("members") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                         )
                     } ?: emptyList()
+                    publishAdminScopedData()
                 }
-        } else {
-            // Own individual tasks only
-            dataListeners += db.collection("$BASE/tasks")
-                .whereEqualTo("assigneeEmail", user.email)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .addSnapshotListener { snap, _ ->
-                    _tasks.value = snap?.documents?.map { doc ->
-                        docToTask(doc.id, doc.data ?: emptyMap())
-                    } ?: emptyList()
-                }
-            // Projects where user is member
-            dataListeners += db.collection("$BASE/projects")
-                .whereArrayContains("members", user.email ?: "")
-                .addSnapshotListener { snap, _ ->
-                    @Suppress("UNCHECKED_CAST")
-                    _projects.value = snap?.documents?.map { doc ->
-                        Project(
-                            id = doc.id,
-                            name = doc.getString("name") ?: "",
-                            members = (doc.get("members") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                        )
-                    } ?: emptyList()
-                }
+            return
         }
+
+        dataListeners += db.collection("$BASE/tasks_for_all")
+            .addSnapshotListener { snap, _ ->
+                _tasksForAll.value = sortTasksDescending((snap?.documents?.map { doc ->
+                    docToTask(doc.id, doc.data ?: emptyMap())
+                } ?: emptyList()).filter { task ->
+                    task.ownerAdminUid == teamOwnerUid ||
+                        (task.ownerAdminUid.isBlank() && task.createdBy.equals(teamOwnerEmail, ignoreCase = true))
+                })
+            }
+
+        dataListeners += db.collection("$BASE/tasks")
+            .whereEqualTo("assigneeEmail", user.email)
+            .addSnapshotListener { snap, _ ->
+                _tasks.value = sortTasksDescending((snap?.documents?.map { doc ->
+                    docToTask(doc.id, doc.data ?: emptyMap())
+                } ?: emptyList()).filter { task ->
+                    task.ownerAdminUid.isBlank() || task.ownerAdminUid == teamOwnerUid
+                })
+            }
+
+        dataListeners += db.collection("$BASE/projects")
+            .whereArrayContains("members", user.email ?: "")
+            .addSnapshotListener { snap, _ ->
+                @Suppress("UNCHECKED_CAST")
+                _projects.value = (snap?.documents?.map { doc ->
+                    Project(
+                        id = doc.id,
+                        name = doc.getString("name") ?: "",
+                        ownerAdminUid = doc.getString("ownerAdminUid") ?: "",
+                        members = (doc.get("members") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                    )
+                } ?: emptyList()).filter { project ->
+                    project.ownerAdminUid.isBlank() || project.ownerAdminUid == teamOwnerUid
+                }
+            }
     }
 
     fun listenProjectTasks(projectId: String, userEmail: String?, isAdmin: Boolean) {
@@ -230,6 +348,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         id = id,
         description = data["description"] as? String ?: "",
         assigneeEmail = data["assigneeEmail"] as? String ?: "",
+        ownerAdminUid = data["ownerAdminUid"] as? String ?: "",
         status = data["status"] as? String ?: "To Do",
         dueDate = data["dueDate"] as? String,
         comments = (data["comments"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList(),
@@ -239,6 +358,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         completedAt = data["completedAt"],
         repeat = data["repeat"] as? Map<String, Any>
     )
+
+    private fun sortTasksDescending(tasks: List<Task>): List<Task> = tasks.sortedByDescending { taskTimestampValue(it.createdAt) }
+
+    private fun taskTimestampValue(value: Any?): Long = when (value) {
+        is Timestamp -> value.toDate().time
+        is Date -> value.time
+        is Long -> value
+        else -> 0L
+    }
+
+    private fun currentOwnerAdminUid(): String {
+        val state = _authState.value as? AuthState.LoggedIn
+        return when {
+            state == null -> auth.currentUser?.uid.orEmpty()
+            state.profile.isAdmin -> state.user.uid
+            else -> state.profile.ownerAdminUid.ifBlank { state.user.uid }
+        }
+    }
+
+    private fun currentOwnerAdminEmail(): String {
+        val state = _authState.value as? AuthState.LoggedIn
+        return when {
+            state == null -> auth.currentUser?.email?.lowercase().orEmpty()
+            state.profile.isAdmin -> (state.user.email ?: state.profile.email).lowercase()
+            else -> state.profile.ownerAdminEmail.ifBlank { state.profile.email.lowercase() }
+        }
+    }
 
     fun signIn(email: String, password: String, onError: (String) -> Unit) {
         viewModelScope.launch {
@@ -260,6 +406,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val normalizedEmail = email.trim().lowercase()
             val trimmedName = name.trim()
+            val ownerAdminUid = currentOwnerAdminUid()
+            val ownerAdminEmail = currentOwnerAdminEmail()
             if (trimmedName.isBlank() || normalizedEmail.isBlank()) {
                 onResult("Name and email are required")
                 return@launch
@@ -294,6 +442,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "email" to normalizedEmail,
                         "role" to "user",
                         "active" to true,
+                        "ownerAdminUid" to ownerAdminUid,
+                        "ownerAdminEmail" to ownerAdminEmail,
                         "createdBy" to adminEmail,
                         "createdAt" to FieldValue.serverTimestamp()
                     )
@@ -354,7 +504,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .get()
             .await()
 
-        val data = mapOf("name" to name, "email" to email, "uid" to uid)
+        val data = mapOf(
+            "name" to name,
+            "email" to email,
+            "uid" to uid,
+            "ownerAdminUid" to currentOwnerAdminUid()
+        )
         if (existing.documents.isEmpty()) {
             db.collection("$BASE/staff").add(data).await()
         } else {
@@ -398,7 +553,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val data = mutableMapOf<String, Any>(
             "description" to description, "assigneeEmail" to assigneeEmail,
             "status" to "To Do", "comments" to emptyList<Any>(),
-            "createdAt" to FieldValue.serverTimestamp(), "createdBy" to creatorEmail
+            "createdAt" to FieldValue.serverTimestamp(), "createdBy" to creatorEmail,
+            "ownerAdminUid" to currentOwnerAdminUid()
         )
         if (!dueDate.isNullOrEmpty()) data["dueDate"] = dueDate
         if (repeatType != "none") {
@@ -441,11 +597,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         collRef.document(task.id).update(update)
     }
 
-    fun deleteTask(taskId: String, taskType: String, projectId: String?) {
+    fun deleteTask(taskId: String, taskType: String, projectId: String?, password: String, onResult: (String?) -> Unit) {
+        if (password != ADMIN_ACTION_PASSWORD) {
+            onResult("Wrong password")
+            return
+        }
         val docRef = if (taskType == "project" && projectId != null)
             db.collection("$BASE/projects/$projectId/tasks").document(taskId)
         else db.collection("$BASE/$taskType").document(taskId)
         docRef.delete()
+            .addOnSuccessListener { onResult(null) }
+            .addOnFailureListener { onResult(it.message ?: "Failed to delete task") }
     }
 
     fun editTask(taskId: String, taskType: String, projectId: String?,
@@ -486,7 +648,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addStaff(name: String, email: String) {
-        db.collection("$BASE/staff").add(mapOf("name" to name, "email" to email.lowercase()))
+        db.collection("$BASE/staff").add(
+            mapOf(
+                "name" to name,
+                "email" to email.lowercase(),
+                "ownerAdminUid" to currentOwnerAdminUid()
+            )
+        )
     }
 
     fun editStaff(id: String, name: String, email: String) {
@@ -500,8 +668,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createProject(name: String, members: List<String>) {
         db.collection("$BASE/projects").add(
-            mapOf("name" to name, "members" to members, "createdAt" to FieldValue.serverTimestamp())
+            mapOf(
+                "name" to name,
+                "members" to members,
+                "ownerAdminUid" to currentOwnerAdminUid(),
+                "ownerAdminEmail" to currentOwnerAdminEmail(),
+                "createdAt" to FieldValue.serverTimestamp()
+            )
         )
+    }
+
+    fun editSubUser(staff: Staff, newName: String, password: String, onResult: (String?) -> Unit) {
+        val trimmedName = newName.trim()
+        if (password != ADMIN_ACTION_PASSWORD) {
+            onResult("Wrong password")
+            return
+        }
+        if (trimmedName.isBlank()) {
+            onResult("Name is required")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                db.collection("$BASE/staff").document(staff.id)
+                    .update("name", trimmedName)
+                    .await()
+                if (staff.uid.isNotBlank()) {
+                    db.collection("$BASE/users").document(staff.uid)
+                        .update(
+                            mapOf(
+                                "name" to trimmedName,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                        .await()
+                }
+                onResult(null)
+            } catch (e: Exception) {
+                onResult(e.message ?: "Failed to update sub user")
+            }
+        }
+    }
+
+    fun removeSubUser(staff: Staff, password: String, onResult: (String?) -> Unit) {
+        if (password != ADMIN_ACTION_PASSWORD) {
+            onResult("Wrong password")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                if (staff.uid.isNotBlank()) {
+                    db.collection("$BASE/users").document(staff.uid)
+                        .update(
+                            mapOf(
+                                "active" to false,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                        .await()
+                }
+                db.collection("$BASE/staff").document(staff.id).delete().await()
+                onResult(null)
+            } catch (e: Exception) {
+                onResult(e.message ?: "Failed to remove sub user")
+            }
+        }
     }
 
     fun editProject(id: String, name: String) {

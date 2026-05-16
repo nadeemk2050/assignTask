@@ -624,6 +624,8 @@ fun SettingsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     var newEmail by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var submitError by remember { mutableStateOf<String?>(null) }
+    var editingStaff by remember { mutableStateOf<Staff?>(null) }
+    var removingStaff by remember { mutableStateOf<Staff?>(null) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         contentPadding = PaddingValues(vertical = 12.dp),
@@ -680,6 +682,14 @@ fun SettingsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
                             Text(s.email, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { editingStaff = s }) {
+                                Text("Edit")
+                            }
+                            TextButton(onClick = { removingStaff = s }) {
+                                Text("Remove", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
                 }
             }
@@ -691,6 +701,106 @@ fun SettingsPage(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
             }
         }
     }
+
+    editingStaff?.let { staffMember ->
+        EditSubUserDialog(staff = staffMember, vm = vm, onDismiss = { editingStaff = null })
+    }
+
+    removingStaff?.let { staffMember ->
+        RemoveSubUserDialog(staff = staffMember, vm = vm, onDismiss = { removingStaff = null })
+    }
+}
+
+@Composable
+fun EditSubUserDialog(staff: Staff, vm: AppViewModel, onDismiss: () -> Unit) {
+    var name by remember(staff.id) { mutableStateOf(staff.name) }
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Sub User") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; error = null },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = staff.email,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    label = { Text("Admin Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                vm.editSubUser(staff, name, password) { err ->
+                    error = err
+                    if (err == null) onDismiss()
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+fun RemoveSubUserDialog(staff: Staff, vm: AppViewModel, onDismiss: () -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove Sub User") },
+        text = {
+            Column {
+                Text("Remove ${staff.name} from this admin team? Their app access will be disabled.")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    label = { Text("Admin Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                vm.removeSubUser(staff, password) { err ->
+                    error = err
+                    if (err == null) onDismiss()
+                }
+            }) { Text("Remove") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -742,6 +852,7 @@ fun TaskRow(task: Task, taskType: String, projectId: String?, user: FirebaseUser
             onShowComments: (Task, String, String?) -> Unit,
             onEditTask: (Task, String, String?) -> Unit) {
     val isDone = task.isDone
+    var showDeleteDialog by remember(task.id) { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
         Checkbox(checked = isDone, onCheckedChange = { checked ->
             vm.toggleTaskDone(task, taskType, projectId, checked, user.email ?: "")
@@ -785,13 +896,61 @@ fun TaskRow(task: Task, taskType: String, projectId: String?, user: FirebaseUser
                 }
             }
             if (isAdmin) {
-                IconButton(onClick = { vm.deleteTask(task.id, taskType, projectId) }, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.error)
                 }
             }
         }
     }
+
+    if (showDeleteDialog) {
+        TaskDeletePasswordDialog(
+            task = task,
+            taskType = taskType,
+            projectId = projectId,
+            vm = vm,
+            onDismiss = { showDeleteDialog = false }
+        )
+    }
+}
+
+@Composable
+fun TaskDeletePasswordDialog(task: Task, taskType: String, projectId: String?, vm: AppViewModel, onDismiss: () -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Task") },
+        text = {
+            Column {
+                Text("Enter admin password to delete this task.")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    label = { Text("Admin Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                vm.deleteTask(task.id, taskType, projectId, password) { err ->
+                    error = err
+                    if (err == null) onDismiss()
+                }
+            }) { Text("Delete") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
