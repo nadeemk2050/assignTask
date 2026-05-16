@@ -12,6 +12,9 @@ jobs:
   build:
     timeout-minutes: 25
     runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
 
     defaults:
       run:
@@ -27,13 +30,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v2
-
-      - name: Install Android platform packages
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Configure Android SDK location
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
