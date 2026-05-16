@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION", "EXPOSED_FROM_PACKAGE_PRIVATE")
+
 package com.assigntask.app
 
 import android.os.Bundle
@@ -57,7 +59,6 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     }
 }
 
-@Suppress("EXPOSED_FROM_PACKAGE_PRIVATE", "DEPRECATION")
 @Composable
 fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     var currentPage by remember { mutableStateOf<String>("tasksForAll") }
