@@ -57,8 +57,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     }
 }
 
-@Suppress("EXPERIMENTAL_OVERRIDE")
-@OptIn(ExperimentalMaterial3::class)
+@Suppress("EXPOSED_FROM_PACKAGE_PRIVATE", "DEPRECATION")
 @Composable
 fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     var currentPage by remember { mutableStateOf<String>("tasksForAll") }
