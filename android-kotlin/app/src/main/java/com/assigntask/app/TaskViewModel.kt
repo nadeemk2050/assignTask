@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import java.util.Date
 import java.util.UUID
 
 private const val WEB_APP_ID = "1:90081570769:web:1349e338f08c1643003af0"
@@ -498,7 +499,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             db.collection("$BASE/projects/$projectId/tasks").document(taskId)
         else db.collection("$BASE/$taskType").document(taskId)
         val comment = mapOf("text" to commentText, "authorEmail" to authorEmail,
-            "createdAt" to FieldValue.serverTimestamp())
+            "createdAt" to Date())
         docRef.update("comments", FieldValue.arrayUnion(comment))
     }
 
