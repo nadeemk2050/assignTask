@@ -1,7 +1,10 @@
 package com.assigntask.app
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
@@ -11,22 +14,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class TaskViewModel : ViewModel() {
-    private val tasksRef = Firebase.firestore.collection("tasks")
+class TaskViewModel(application: Application) : AndroidViewModel(application) {
+    private var tasksRef: CollectionReference? = null
 
     private val _tasks = MutableStateFlow<List<TaskItem>>(emptyList())
     val tasks: StateFlow<List<TaskItem>> = _tasks.asStateFlow()
 
-    private val _status = MutableStateFlow("Connected to Firebase project: assigntask-51813")
+    private val _status = MutableStateFlow("Starting app...")
     val status: StateFlow<String> = _status.asStateFlow()
 
     init {
+        val apps = FirebaseApp.getApps(application)
+        if (apps.isEmpty()) {
+            _status.value = "Firebase not configured in APK. Add google-services.json and rebuild."
+            return
+        }
+
+        tasksRef = Firebase.firestore.collection("tasks")
+        _status.value = "Connected to Firebase project: assigntask-51813"
         listenForTasks()
     }
 
     private fun listenForTasks() {
+        val ref = tasksRef ?: return
+
         try {
-            tasksRef.orderBy("createdAt", Query.Direction.DESCENDING)
+            ref.orderBy("createdAt", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         _status.value = "Firebase error: ${error.message ?: "Unknown error"}"
@@ -47,7 +60,7 @@ class TaskViewModel : ViewModel() {
                     }
                 }
         } catch (ex: Exception) {
-            _status.value = "Firebase not configured yet. Add google-services.json to app/."
+            _status.value = "Firebase setup error: ${ex.message ?: "Unknown error"}"
         }
     }
 
@@ -55,9 +68,15 @@ class TaskViewModel : ViewModel() {
         val normalized = title.trim()
         if (normalized.isEmpty()) return
 
+        val ref = tasksRef
+        if (ref == null) {
+            _status.value = "Cannot add task: Firebase not configured."
+            return
+        }
+
         viewModelScope.launch {
             try {
-                tasksRef.add(
+                ref.add(
                     mapOf(
                         "title" to normalized,
                         "done" to false,
@@ -71,9 +90,15 @@ class TaskViewModel : ViewModel() {
     }
 
     fun toggleDone(item: TaskItem) {
+        val ref = tasksRef
+        if (ref == null) {
+            _status.value = "Cannot update task: Firebase not configured."
+            return
+        }
+
         viewModelScope.launch {
             try {
-                tasksRef.document(item.id).update("done", !item.done)
+                ref.document(item.id).update("done", !item.done)
             } catch (ex: Exception) {
                 _status.value = "Update failed: ${ex.message ?: "Unknown error"}"
             }
