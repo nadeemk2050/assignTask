@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -59,7 +60,8 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 @Composable
 fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
     var currentPage by remember { mutableStateOf<String>("tasksForAll") }
-    var drawerOpen by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     ModalNavigationDrawer(
         drawerContent = {
@@ -67,7 +69,7 @@ fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
                 currentPage = currentPage,
                 onPageSelect = { page ->
                     currentPage = page
-                    drawerOpen = false
+                    scope.launch { drawerState.close() }
                 },
                 profile = profile,
                 vm = vm,
@@ -75,17 +77,19 @@ fun MainAppScreen(vm: AppViewModel, user: FirebaseUser, profile: UserProfile) {
                 onLogout = { vm.signOut() }
             )
         },
-        drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+        drawerState = drawerState,
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
-        drawerOpen = (drawerState.isOpen)
-
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text(pageTitle(currentPage)) },
                     navigationIcon = {
-                        IconButton(onClick = { drawerOpen = !drawerOpen }) {
+                        IconButton(onClick = {
+                            scope.launch {
+                                if (drawerState.isOpen) drawerState.close() else drawerState.open()
+                            }
+                        }) {
                             Icon(Icons.Default.Menu, "Menu")
                         }
                     }
