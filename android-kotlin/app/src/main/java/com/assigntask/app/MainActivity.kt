@@ -70,14 +70,9 @@ fun AuthScreen(vm: AppViewModel) {
     var password by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var showAdminSignupConfirm by remember { mutableStateOf(false) }
     val selfRegistrationAllowed by vm.selfRegistrationAllowed.collectAsState()
     val globalError by vm.errorMessage.collectAsState()
-
-    LaunchedEffect(selfRegistrationAllowed) {
-        if (selfRegistrationAllowed == false) {
-            isSignUp = false
-        }
-    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState()),
@@ -91,8 +86,7 @@ fun AuthScreen(vm: AppViewModel) {
         Text(
             when {
                 selfRegistrationAllowed == null -> "Checking workspace access..."
-                isSignUp -> "Create the first admin account"
-                selfRegistrationAllowed == false -> "Sign in with an admin-created sub user account"
+                isSignUp -> "You are creating a full new admin account"
                 else -> "Sign in to manage your team"
             },
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
@@ -121,24 +115,43 @@ fun AuthScreen(vm: AppViewModel) {
         Button(
             onClick = {
                 errorMsg = null
-                if (isSignUp) vm.signUp(email, password) { errorMsg = it }
-                else vm.signIn(email, password) { errorMsg = it }
+                if (isSignUp) {
+                    showAdminSignupConfirm = true
+                } else {
+                    vm.signIn(email, password) { errorMsg = it }
+                }
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = selfRegistrationAllowed != null
         ) { Text(if (isSignUp) "Create Account" else "Sign In") }
 
-        if (selfRegistrationAllowed == true) {
-            TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null },
-                modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text(if (isSignUp) "Already have an account? Sign In" else "Need an account? Sign Up")
-            }
-        } else if (selfRegistrationAllowed == false) {
-            Text(
-                "Only the first account can sign up here. After that, the admin must add sub users.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
-                modifier = Modifier.padding(top = 8.dp)
+        TextButton(onClick = { isSignUp = !isSignUp; errorMsg = null },
+            modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Text(if (isSignUp) "Already have an account? Sign In" else "Need an account? Sign Up")
+        }
+
+        if (showAdminSignupConfirm) {
+            AlertDialog(
+                onDismissRequest = { showAdminSignupConfirm = false },
+                title = { Text("Create New Admin Account") },
+                text = {
+                    Text(
+                        "You are making a full new admin account. Are you sure you need it? If you want to join any team, tell the admin to add you."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showAdminSignupConfirm = false
+                        vm.signUp(email, password) { errorMsg = it }
+                    }) {
+                        Text("Yes, create admin")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAdminSignupConfirm = false }) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
     }

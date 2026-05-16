@@ -113,36 +113,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     active = active
                 )
             } else {
-                val adminExists = db.collection("$BASE/users")
-                    .whereEqualTo("role", "admin")
-                    .limit(1)
-                    .get()
-                    .await()
-                    .isEmpty
-                    .not()
-
-                if (adminExists) {
-                    _errorMessage.value = "This account is not provisioned. Ask the admin to add you as a sub user."
-                    auth.signOut()
-                    null
-                } else {
-                    val profile = UserProfile(
-                        name = user.email?.substringBefore('@') ?: "Admin",
-                        email = user.email ?: "",
-                        role = "admin",
-                        active = true
+                val profile = UserProfile(
+                    name = user.email?.substringBefore('@') ?: "Admin",
+                    email = user.email ?: "",
+                    role = "admin",
+                    active = true
+                )
+                db.collection("$BASE/users").document(user.uid).set(
+                    mapOf(
+                        "name" to profile.name,
+                        "email" to profile.email,
+                        "role" to profile.role,
+                        "active" to profile.active,
+                        "createdAt" to FieldValue.serverTimestamp()
                     )
-                    db.collection("$BASE/users").document(user.uid).set(
-                        mapOf(
-                            "name" to profile.name,
-                            "email" to profile.email,
-                            "role" to profile.role,
-                            "active" to profile.active,
-                            "createdAt" to FieldValue.serverTimestamp()
-                        )
-                    ).await()
-                    profile
-                }
+                ).await()
+                profile
             }
         } catch (e: Exception) {
             _errorMessage.value = "Error loading profile: ${e.message}"
@@ -264,10 +250,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun signUp(email: String, password: String, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                if (_selfRegistrationAllowed.value == false) {
-                    onError("Self sign-up is disabled. Ask the admin to add you as a sub user.")
-                    return@launch
-                }
                 auth.createUserWithEmailAndPassword(email.trim(), password).await()
             }
             catch (e: Exception) { onError(e.message ?: "Sign up failed") }
