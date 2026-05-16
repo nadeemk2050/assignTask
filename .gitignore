@@ -67,3 +67,11 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Android Kotlin (cloud) build output
+android-kotlin/.gradle/
+android-kotlin/**/build/
+android-kotlin/local.properties
+android-kotlin/app/google-services.json
+*.jks
+*.keystore

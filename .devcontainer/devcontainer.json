@@ -1,0 +1,16 @@
+{
+  "name": "AssignTask Android Cloud",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-gradle",
+        "ms-azuretools.vscode-docker",
+        "GitHub.copilot"
+      ]
+    }
+  },
+  "postCreateCommand": "cd android-kotlin && gradle tasks"
+}
